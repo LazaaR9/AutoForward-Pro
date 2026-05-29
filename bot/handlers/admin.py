@@ -57,6 +57,7 @@ logger = logging.getLogger(__name__)
 (
     ADD_SOURCE_WAIT,
     ADD_TARGET_WAIT,
+    FILTER_TYPE_WAIT,
     FILTER_FIND_WAIT,
     FILTER_REPLACE_WAIT,
     SCHED_CONTENT_WAIT,
@@ -65,7 +66,7 @@ logger = logging.getLogger(__name__)
     AUTH_PHONE_WAIT,
     AUTH_CODE_WAIT,
     AUTH_2FA_WAIT,
-) = range(10)
+) = range(11)
 
 _CTX_FIND = "filter_find_text"
 _CTX_SCHED_CONTENT = "sched_content"
@@ -599,18 +600,56 @@ async def filter_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if not await _check_authorized(update, admin_id):
         return ConversationHandler.END
 
+    keyboard = [
+        [InlineKeyboardButton("🔗 Replace Any Link", callback_data="ftype:all_links")],
+        [InlineKeyboardButton("👤 Replace Any Username", callback_data="ftype:all_usernames")],
+        [InlineKeyboardButton("🎯 Replace Specific Text/Link", callback_data="ftype:specific")]
+    ]
+    
     await update.message.reply_text(
         "🔧 *Add Text Filter*\n\n"
-        "Filters automatically replace text in messages before forwarding.\n\n"
-        "*Use cases:*\n"
-        "• Replace a username: `@source_channel` → `@my_channel`\n"
-        "• Remove a link: `https://t.me/xxx` → _(empty)_\n"
-        "• Replace any word or phrase\n\n"
-        "📝 *Step 1:* Send the text you want to *find* (exact match).\n\n"
-        "Type /cancel to abort.",
+        "Filters automatically replace text, links, or usernames in messages before forwarding.\n\n"
+        "What would you like to do?",
         parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
-    return FILTER_FIND_WAIT
+    return FILTER_TYPE_WAIT
+
+async def filter_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    ftype = query.data.split(":")[1]
+    
+    if ftype == "all_links":
+        context.user_data[_CTX_FIND] = "<ALL_LINKS>"
+        await query.edit_message_text(
+            "🔗 *Replace Any Link*\n\n"
+            "Send the *default link* you want to replace ALL links with.\n"
+            "_(Send a single space or leave blank to delete occurrences.)_\n\n"
+            "Type /cancel to abort.",
+            parse_mode="Markdown",
+        )
+        return FILTER_REPLACE_WAIT
+        
+    elif ftype == "all_usernames":
+        context.user_data[_CTX_FIND] = "<ALL_USERNAMES>"
+        await query.edit_message_text(
+            "👤 *Replace Any Username*\n\n"
+            "Send the *default username* you want to replace ALL usernames with.\n"
+            "_(Send a single space or leave blank to delete occurrences.)_\n\n"
+            "Type /cancel to abort.",
+            parse_mode="Markdown",
+        )
+        return FILTER_REPLACE_WAIT
+        
+    else:
+        await query.edit_message_text(
+            "🎯 *Replace Specific Text/Link/Username*\n\n"
+            "📝 *Step 1:* Send the exact text/link/username you want to *find*.\n\n"
+            "Type /cancel to abort.",
+            parse_mode="Markdown",
+        )
+        return FILTER_FIND_WAIT
 
 
 async def filter_find_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -641,10 +680,12 @@ async def filter_replace_receive(update: Update, context: ContextTypes.DEFAULT_T
     filters_db.add_filter(admin_id, find_text, replace_text.strip())
 
     label = f"`{replace_text.strip()}`" if replace_text.strip() else "_(deleted)_"
+    display_find = "Any Link" if find_text == "<ALL_LINKS>" else "Any Username" if find_text == "<ALL_USERNAMES>" else f"`{find_text}`"
+    
     current = filters_db.get_filters(admin_id)
     await update.message.reply_text(
         f"✅ *Filter saved!*\n\n"
-        f"Find: `{find_text}`\n"
+        f"Find: {display_find}\n"
         f"Replace with: {label}\n\n"
         f"Total filters: *{len(current)}* — use /myfilters to view all.",
         parse_mode="Markdown",
@@ -673,7 +714,8 @@ async def myfilters_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     keyboard = []
     for i, f in enumerate(rule_list, 1):
         replace = f["replace_text"] or "_(delete)_"
-        text += f"{i}. `{f['find_text']}` → `{replace}`\n"
+        display_find = "Any Link" if f['find_text'] == "<ALL_LINKS>" else "Any Username" if f['find_text'] == "<ALL_USERNAMES>" else f"`{f['find_text']}`"
+        text += f"{i}. {display_find} → `{replace}`\n"
         keyboard.append([
             InlineKeyboardButton(f"🗑 Remove #{i}", callback_data=f"rmfilter:{f['id']}")
         ])
@@ -946,6 +988,9 @@ def register(application) -> None:
     application.add_handler(ConversationHandler(
         entry_points=[CommandHandler("filter", filter_start)],
         states={
+            FILTER_TYPE_WAIT: [
+                CallbackQueryHandler(filter_type_callback, pattern=r"^ftype:"),
+            ],
             FILTER_FIND_WAIT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, filter_find_receive),
             ],
