@@ -1,0 +1,8 @@
+# Tested and working on Python 3.14
+python-telegram-bot==22.7
+supabase==2.30.0
+APScheduler==3.10.4
+python-dotenv==1.0.0
+pytz==2024.1
+websockets>=14.0,<16     # Supabase realtime requires this range
+Telethon==1.38.1
