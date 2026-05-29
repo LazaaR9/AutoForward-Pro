@@ -997,22 +997,25 @@ def register(application) -> None:
     ))
 
     # /filter
-    application.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("filter", filter_start)],
-        states={
-            FILTER_TYPE_WAIT: [
-                CallbackQueryHandler(filter_type_callback, pattern=r"^ftype:"),
-            ],
-            FILTER_FIND_WAIT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, filter_find_receive),
-            ],
-            FILTER_REPLACE_WAIT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, filter_replace_receive),
-            ],
-        },
-        fallbacks=[cancel_handler],
-        name="filter",
-    ))
+    with warnings.catch_warnings():
+        import telegram.warnings
+        warnings.simplefilter("ignore", telegram.warnings.PTBUserWarning)
+        application.add_handler(ConversationHandler(
+            entry_points=[CommandHandler("filter", filter_start)],
+            states={
+                FILTER_TYPE_WAIT: [
+                    CallbackQueryHandler(filter_type_callback, pattern=r"^ftype:"),
+                ],
+                FILTER_FIND_WAIT: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, filter_find_receive),
+                ],
+                FILTER_REPLACE_WAIT: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, filter_replace_receive),
+                ],
+            },
+            fallbacks=[cancel_handler],
+            name="filter",
+        ))
 
     # /schedule
     with warnings.catch_warnings():
