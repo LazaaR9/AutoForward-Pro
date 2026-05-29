@@ -196,6 +196,9 @@ def _register_forwarding_listener(client: TelegramClient, admin_id: int, source_
 
         original_text = event.message.message or ""
         filtered_text = apply_filters(admin_id, original_text)
+        
+        if filtered_text is None:
+            return  # Message was blocked by a keyword filter
 
         media_path = None
         if event.message.media:

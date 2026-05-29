@@ -603,7 +603,8 @@ async def filter_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     keyboard = [
         [InlineKeyboardButton("🔗 Replace Any Link", callback_data="ftype:all_links")],
         [InlineKeyboardButton("👤 Replace Any Username", callback_data="ftype:all_usernames")],
-        [InlineKeyboardButton("🎯 Replace Specific Text/Link", callback_data="ftype:specific")]
+        [InlineKeyboardButton("🎯 Replace Specific Text/Link", callback_data="ftype:specific")],
+        [InlineKeyboardButton("🚫 Block Message by Keyword", callback_data="ftype:block")]
     ]
     
     await update.message.reply_text(
@@ -642,6 +643,17 @@ async def filter_type_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return FILTER_REPLACE_WAIT
         
+    elif ftype == "block":
+        context.user_data[_CTX_FIND] = "<BLOCK>"
+        await query.edit_message_text(
+            "🚫 *Block Message by Keyword*\n\n"
+            "Send the *keyword*. If a message contains this keyword, it will NOT be forwarded.\n"
+            "_(Case-insensitive match)_ \n\n"
+            "Type /cancel to abort.",
+            parse_mode="Markdown",
+        )
+        return FILTER_REPLACE_WAIT
+
     else:
         await query.edit_message_text(
             "🎯 *Replace Specific Text/Link/Username*\n\n"
@@ -680,7 +692,7 @@ async def filter_replace_receive(update: Update, context: ContextTypes.DEFAULT_T
     filters_db.add_filter(admin_id, find_text, replace_text.strip())
 
     label = f"`{replace_text.strip()}`" if replace_text.strip() else "_(deleted)_"
-    display_find = "Any Link" if find_text == "<ALL_LINKS>" else "Any Username" if find_text == "<ALL_USERNAMES>" else f"`{find_text}`"
+    display_find = "Any Link" if find_text == "<ALL_LINKS>" else "Any Username" if find_text == "<ALL_USERNAMES>" else "Block Keyword" if find_text == "<BLOCK>" else f"`{find_text}`"
     
     current = filters_db.get_filters(admin_id)
     await update.message.reply_text(
@@ -714,7 +726,7 @@ async def myfilters_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     keyboard = []
     for i, f in enumerate(rule_list, 1):
         replace = f["replace_text"] or "_(delete)_"
-        display_find = "Any Link" if f['find_text'] == "<ALL_LINKS>" else "Any Username" if f['find_text'] == "<ALL_USERNAMES>" else f"`{f['find_text']}`"
+        display_find = "Any Link" if f['find_text'] == "<ALL_LINKS>" else "Any Username" if f['find_text'] == "<ALL_USERNAMES>" else "Block Keyword" if f['find_text'] == "<BLOCK>" else f"`{f['find_text']}`"
         text += f"{i}. {display_find} → `{replace}`\n"
         keyboard.append([
             InlineKeyboardButton(f"🗑 Remove #{i}", callback_data=f"rmfilter:{f['id']}")

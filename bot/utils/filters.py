@@ -20,7 +20,13 @@ def apply_filters(admin_id: int, text: str | None) -> str | None:
 
     rules = get_filters(admin_id)
     
-    # Process regex wildcard rules first
+    # Process blocking rules first
+    for rule in rules:
+        if rule["find_text"] == "<BLOCK>":
+            if rule["replace_text"].lower() in text.lower():
+                return None  # Signal to block this message completely
+
+    # Process regex wildcard rules
     for rule in rules:
         find = rule["find_text"]
         replace = rule["replace_text"]
@@ -34,7 +40,7 @@ def apply_filters(admin_id: int, text: str | None) -> str | None:
     # Process standard exact match rules
     for rule in rules:
         find = rule["find_text"]
-        if find not in ("<ALL_LINKS>", "<ALL_USERNAMES>"):
+        if find not in ("<ALL_LINKS>", "<ALL_USERNAMES>", "<BLOCK>"):
             text = text.replace(find, rule["replace_text"])
 
     return text
