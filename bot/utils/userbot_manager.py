@@ -179,11 +179,11 @@ async def start_userbot(admin_id: int, bot) -> TelegramClient | None:
 
 
 def _register_forwarding_listener(client: TelegramClient, admin_id: int, source_channel_id: int, bot) -> None:
-    def normalize_id(cid: int) -> int:
+    def normalize_id(cid) -> int:
         s = str(cid)
         if s.startswith("-100"): return int(s[4:])
         if s.startswith("-"):    return int(s[1:])
-        return cid
+        return int(s)
 
     @client.on(events.NewMessage)
     async def handler(event):
