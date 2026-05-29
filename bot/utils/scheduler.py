@@ -94,7 +94,8 @@ def schedule_message(
     post_time: "HH:MM" in UTC.
     """
     scheduler = get_scheduler()
-    hour, minute = map(int, post_time.split(":"))
+    parts = post_time.split(":")
+    hour, minute = int(parts[0]), int(parts[1])
     job_id = f"sched_{schedule_id}"
 
     _remove_job_if_exists(job_id)
