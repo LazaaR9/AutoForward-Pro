@@ -124,7 +124,6 @@ async def _cleanup_auth(context: ContextTypes.DEFAULT_TYPE, admin_id: int) -> No
 # /authorize — OTP login
 # ─────────────────────────────────────────────────────────────────────────────
 
-@require_admin
 async def authorize_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     admin_id = update.effective_user.id
 

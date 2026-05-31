@@ -8,8 +8,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
 
 from bot.config import SUPER_ADMIN_ID, TRIAL_DAYS
 from bot.db import users as users_db
@@ -164,6 +164,12 @@ async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def pro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show premium plans and payment methods."""
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Yes", callback_data="pro_yes"),
+            InlineKeyboardButton("❌ No", callback_data="pro_no")
+        ]
+    ]
     await update.message.reply_text(
         "⭐ *Upgrade to Premium*\n\n"
         "Unlock professional features like unlimited forwarding, content filtering, and message scheduling!\n\n"
@@ -180,10 +186,27 @@ async def pro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "_(Tap the ID/Address to copy it)_\n\n"
         "🇮🇳 *UPI Payment:*\n"
         "If you want to pay with UPI, please contact @Savvyop\n\n"
-        "✅ *After payment, send a screenshot to @Savvyop to activate your account!*",
+        "❓ *Did you done payment?*",
         parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+async def pro_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "pro_yes":
+        await query.edit_message_text(
+            "✅ *Payment Done!*\n\n"
+            "Please send your payment screenshot to @Savvyop and verify with Savvy.\n"
+            "Once verified, you will be made an Admin and can use all the bot commands!",
+            parse_mode="Markdown"
+        )
+    elif query.data == "pro_no":
+        await query.edit_message_text(
+            "ℹ️ No problem! You can use the /pro command anytime to view the plans and upgrade.",
+            parse_mode="Markdown"
+        )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -208,3 +231,4 @@ def register(application) -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("plan", plan_command))
     application.add_handler(CommandHandler("pro", pro_command))
+    application.add_handler(CallbackQueryHandler(pro_callback, pattern=r"^pro_"))
