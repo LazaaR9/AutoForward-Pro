@@ -129,7 +129,7 @@ def require_admin(func: Callable) -> Callable:
             msg = (
                 "⭐ *Premium Plan Required*\n\n"
                 "This feature is restricted to active subscribers.\n\n"
-                f"Please contact @{sa_uname} to purchase a plan and activate your forwarding account!"
+                "Please use /pro to view subscription plans and purchase premium to unlock this feature!"
             )
             if update.message:
                 await update.message.reply_text(msg, parse_mode="Markdown")

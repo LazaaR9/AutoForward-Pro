@@ -99,7 +99,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"/mystatus — View subscription\n"
         f"/plan — Check plan status\n\n"
         f"⭐ *Paid Plan Needed:*\n"
-        f"To activate real-time channel forwarding, please contact @{sa_uname} to purchase a plan and activate your account!",
+        f"To activate real-time channel forwarding, please use /pro to purchase a plan and activate your account!",
         parse_mode="Markdown",
     )
 
@@ -151,9 +151,36 @@ async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"Status: {status_icon} {'Active' if active else 'Expired'}\n"
         f"Days remaining: *{days_left}* / {TRIAL_DAYS}\n\n"
         + (
-            f"Contact the Super Admin to upgrade." if not active else
-            f"Your trial is active. Contact the Super Admin to upgrade to a paid plan."
+            f"Please use /pro to view subscription plans and upgrade." if not active else
+            f"Your trial is active. Please use /pro to view subscription plans and upgrade to a paid plan."
         ),
+        parse_mode="Markdown",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /pro
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def pro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show premium plans and payment methods."""
+    await update.message.reply_text(
+        "⭐ *Upgrade to Premium*\n\n"
+        "Unlock professional features like unlimited forwarding, content filtering, and message scheduling!\n\n"
+        "📋 *Plans:*\n"
+        "• *1 month:* 88₹ (2.9₹ per day)\n"
+        "• *2 months:* 150₹ (2.5₹ per day)\n\n"
+        "💳 *Payment Methods:*\n\n"
+        "*Binance Pay ID:*\n"
+        "`212753448`\n\n"
+        "*Crypto (BEP20 Address):*\n"
+        "`0x565f64c9edc74e60ae4ca24c816b25d10dd9bdf6`\n\n"
+        "*Crypto (TRC20 Address):*\n"
+        "`TMjuAXzEfvLuzxQv9CrtPWy4m6jA2QxvHf`\n\n"
+        "_(Tap the ID/Address to copy it)_\n\n"
+        "🇮🇳 *UPI Payment:*\n"
+        "If you want to pay with UPI, please contact @Savvyop\n\n"
+        "✅ *After payment, send a screenshot to @Savvyop to activate your account!*",
         parse_mode="Markdown",
     )
 
@@ -180,3 +207,4 @@ def _get_superadmin_username() -> str:
 def register(application) -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("plan", plan_command))
+    application.add_handler(CommandHandler("pro", pro_command))
