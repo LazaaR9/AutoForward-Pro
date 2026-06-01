@@ -86,7 +86,7 @@ async def howtoauth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "[3] Telegram will send you a 5-digit login code in your official Telegram app.\n"
         "[4] *IMPORTANT:* Send the code with a hyphen (e.g., `12-345`) to bypass Telegram's anti-bot security!\n"
         "[5] If you have 2-Step Verification enabled, it will ask for your password.\n\n"
-        "* Once done, your account is linked and ready to forward!"
+        "- Once done, your account is linked and ready to forward!"
     )
     await _send_help_screen(update, "auth.png", text)
 
@@ -96,7 +96,7 @@ async def howtoaddforwarding_command(update: Update, context: ContextTypes.DEFAU
         "[1] Send the /addsource command and provide the channel username or ID from where you want to copy messages.\n"
         "[2] Send the /addtarget command and provide the channel username or ID to where you want the messages forwarded.\n"
         "[3] You can add multiple targets by repeating /addtarget.\n\n"
-        "* The bot will now instantly copy any new message from your Source to all your Targets!"
+        "- The bot will now instantly copy any new message from your Source to all your Targets!"
     )
     await _send_help_screen(update, "set_forwarding.png", text)
 
