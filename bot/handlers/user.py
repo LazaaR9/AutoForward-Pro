@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
@@ -16,6 +17,9 @@ from bot.db import users as users_db
 from bot.utils import userbot_manager
 
 logger = logging.getLogger(__name__)
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+IMAGES_DIR = BASE_DIR / "images"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -84,24 +88,29 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Regular user — show greeting, all admin commands, and premium call-to-action
     sa_uname = _get_superadmin_username()
-    await update.message.reply_text(
-        f"👋 *Welcome to the Telegram Forwarding Bot!*\n\n"
-        f"📋 *Available Admin Commands:*\n"
+    text = (
+        f"👋 *Welcome to the Auto Forward Bot!*\n\n"
+        f"👉 *Start Here:* Send /help to see step-by-step image tutorials on how to use the bot!\n\n"
+        f"📋 *Available Commands:*\n"
         f"/authorize — Link your Telegram account (Required)\n"
         f"/addsource — Set source channel\n"
-        f"/removesource — Remove source channel\n"
-        f"/addtarget — Add a target channel\n"
-        f"/removetarget — Remove a target channel\n"
-        f"/filter — Add text filter\n"
+        f"/addtarget — Add target channels\n"
+        f"/filter — Add text & link filters\n"
         f"/myfilters — View/remove filters\n"
-        f"/schedule — Schedule a message\n"
+        f"/schedule — Schedule automated messages\n"
         f"/removeschedule — Remove a schedule\n"
-        f"/mystatus — View subscription\n"
+        f"/mystatus — View your status\n"
         f"/plan — Check plan status\n\n"
         f"⭐ *Paid Plan Needed:*\n"
-        f"To activate real-time channel forwarding, please use /pro to purchase a plan and activate your account!",
-        parse_mode="Markdown",
+        f"To activate real-time channel forwarding, please use /pro to purchase a plan and activate your account!"
     )
+    
+    image_path = IMAGES_DIR / "welcome.png"
+    if image_path.exists():
+        with open(image_path, "rb") as photo:
+            await update.message.reply_photo(photo=photo, caption=text, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(text, parse_mode="Markdown")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
