@@ -435,9 +435,9 @@ async def update_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     }
     
     await query.edit_message_text(
-        f"📝 *Updating: {friendly_names.get(key, key)}*\n\n"
+        f"📝 <b>Updating: {friendly_names.get(key, key)}</b>\n\n"
         f"Please send me the new text for this section now.\n"
-        f"You can use HTML formatting tags (like <b>bold</b>) or <tg-emoji> tags.\n\n"
+        f"You can use HTML formatting tags (like <b>bold</b>) or &lt;tg-emoji&gt; tags.\n\n"
         f"Send /cancel to abort.",
         parse_mode="HTML"
     )
