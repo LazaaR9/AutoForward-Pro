@@ -7,7 +7,7 @@ import logging
 import os
 from pathlib import Path
 
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
 
 logger = logging.getLogger(__name__)
@@ -16,30 +16,67 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 IMAGES_DIR = BASE_DIR / "images"
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = (
-        "*Help & Tutorials*\n\n"
-        "Click the buttons below to see how it works:"
-    )
-    keyboard = InlineKeyboardMarkup([
+# Global dictionary to cache uploaded photo file_ids for instant performance
+_PHOTO_CACHE = {}
+
+def get_help_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
         [InlineKeyboardButton("[1] Link Account", callback_data="help_cmd:/howtoauth")],
         [InlineKeyboardButton("[2] Set Forwarding", callback_data="help_cmd:/howtoaddforwarding")],
         [InlineKeyboardButton("[3] Set Filters", callback_data="help_cmd:/howtosetfilter")],
         [InlineKeyboardButton("[4] Schedule Messages", callback_data="help_cmd:/howtoschedule")],
         [InlineKeyboardButton("[5] Premium Info", callback_data="help_cmd:/howtopro")],
     ])
+
+async def _send_help_screen(update: Update, image_name: str, text: str) -> None:
+    query = update.callback_query
+    msg = update.effective_message
+    keyboard = get_help_keyboard()
+    image_path = IMAGES_DIR / image_name
     
-    image_path = IMAGES_DIR / "welcome.png"
-    if image_path.exists():
-        with open(image_path, "rb") as photo:
-            await update.effective_message.reply_photo(
-                photo=photo,
-                caption=text,
-                parse_mode="Markdown",
-                reply_markup=keyboard
-            )
-    else:
-        await update.effective_message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    file_id = _PHOTO_CACHE.get(image_name)
+
+    try:
+        if file_id:
+            # Fast path: use cached file_id
+            if query and msg and msg.photo:
+                # We are in a callback query from a previous photo message, so edit the media!
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=file_id, caption=text, parse_mode="Markdown"),
+                    reply_markup=keyboard
+                )
+            else:
+                await msg.reply_photo(photo=file_id, caption=text, parse_mode="Markdown", reply_markup=keyboard)
+        else:
+            # Slow path: need to read from disk and upload
+            if image_path.exists():
+                with open(image_path, "rb") as f:
+                    if query and msg and msg.photo:
+                        res = await query.edit_message_media(
+                            media=InputMediaPhoto(media=f, caption=text, parse_mode="Markdown"),
+                            reply_markup=keyboard
+                        )
+                        if res and hasattr(res, 'photo') and res.photo:
+                            _PHOTO_CACHE[image_name] = res.photo[-1].file_id
+                    else:
+                        res = await msg.reply_photo(photo=f, caption=text, parse_mode="Markdown", reply_markup=keyboard)
+                        if res and hasattr(res, 'photo') and res.photo:
+                            _PHOTO_CACHE[image_name] = res.photo[-1].file_id
+            else:
+                # Fallback if image doesn't exist on disk
+                if query:
+                    await query.edit_message_text(text=text, parse_mode="Markdown", reply_markup=keyboard)
+                else:
+                    await msg.reply_text(text=text, parse_mode="Markdown", reply_markup=keyboard)
+    except Exception as e:
+        logger.error(f"Failed to send/edit help screen: {e}")
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = (
+        "*Help & Tutorials*\n\n"
+        "Click the buttons below to see how it works:"
+    )
+    await _send_help_screen(update, "welcome.png", text)
 
 async def howtoauth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
@@ -51,12 +88,7 @@ async def howtoauth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "[5] If you have 2-Step Verification enabled, it will ask for your password.\n\n"
         "* Once done, your account is linked and ready to forward!"
     )
-    image_path = IMAGES_DIR / "auth.png"
-    if image_path.exists():
-        with open(image_path, "rb") as photo:
-            await update.effective_message.reply_photo(photo=photo, caption=text, parse_mode="Markdown")
-    else:
-        await update.effective_message.reply_text(text, parse_mode="Markdown")
+    await _send_help_screen(update, "auth.png", text)
 
 async def howtoaddforwarding_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
@@ -66,12 +98,7 @@ async def howtoaddforwarding_command(update: Update, context: ContextTypes.DEFAU
         "[3] You can add multiple targets by repeating /addtarget.\n\n"
         "* The bot will now instantly copy any new message from your Source to all your Targets!"
     )
-    image_path = IMAGES_DIR / "set_forwarding.png"
-    if image_path.exists():
-        with open(image_path, "rb") as photo:
-            await update.effective_message.reply_photo(photo=photo, caption=text, parse_mode="Markdown")
-    else:
-        await update.effective_message.reply_text(text, parse_mode="Markdown")
+    await _send_help_screen(update, "set_forwarding.png", text)
 
 async def howtosetfilter_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
@@ -83,12 +110,7 @@ async def howtosetfilter_command(update: Update, context: ContextTypes.DEFAULT_T
         "[4] *Block Words:* Choose 'Block Message if Contains', provide a word. If the source message has this word, it will *not* be forwarded.\n\n"
         "Use /myfilters to see or delete your active rules."
     )
-    image_path = IMAGES_DIR / "filter.png"
-    if image_path.exists():
-        with open(image_path, "rb") as photo:
-            await update.effective_message.reply_photo(photo=photo, caption=text, parse_mode="Markdown")
-    else:
-        await update.effective_message.reply_text(text, parse_mode="Markdown")
+    await _send_help_screen(update, "filter.png", text)
 
 async def howtoschedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
@@ -99,12 +121,7 @@ async def howtoschedule_command(update: Update, context: ContextTypes.DEFAULT_TY
         "[4] Choose if it should repeat 'Daily' or just run 'One-time'.\n\n"
         "Use /removeschedule to cancel scheduled messages."
     )
-    image_path = IMAGES_DIR / "schedule.png"
-    if image_path.exists():
-        with open(image_path, "rb") as photo:
-            await update.effective_message.reply_photo(photo=photo, caption=text, parse_mode="Markdown")
-    else:
-        await update.effective_message.reply_text(text, parse_mode="Markdown")
+    await _send_help_screen(update, "schedule.png", text)
 
 async def howtopro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
@@ -116,12 +133,7 @@ async def howtopro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         "[5] Click \"I've Paid\" and contact support with your screenshot if required.\n\n"
         "Premium unlocks all advanced features!"
     )
-    image_path = IMAGES_DIR / "pro.png"
-    if image_path.exists():
-        with open(image_path, "rb") as photo:
-            await update.effective_message.reply_photo(photo=photo, caption=text, parse_mode="Markdown")
-    else:
-        await update.effective_message.reply_text(text, parse_mode="Markdown")
+    await _send_help_screen(update, "pro.png", text)
 
 async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
