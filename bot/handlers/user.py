@@ -14,6 +14,7 @@ from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
 
 from bot.config import SUPER_ADMIN_ID, TRIAL_DAYS
 from bot.db import users as users_db
+from bot.db.content import get_content
 from bot.utils import userbot_manager
 
 logger = logging.getLogger(__name__)
@@ -89,10 +90,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Regular user — show greeting, all admin commands, and premium call-to-action
     sa_uname = _get_superadmin_username()
     first_name = tg_user.first_name or "User"
-    text = (
-        f"*Welcome {first_name} to the Auto Forward Bot!*\n\n"
-        f">> *Start Here:* Send /help to see step-by-step image tutorials on how to use the bot!\n\n"
-        f"*Available Commands:*\n"
+    default_text = (
+        f"<b>Welcome {first_name} to the Auto Forward Bot!</b>\n\n"
+        f">> <b>Start Here:</b> Send /help to see step-by-step image tutorials on how to use the bot!\n\n"
+        f"<b>Available Commands:</b>\n"
         f"/authorize — Link your Telegram account (Required)\n"
         f"/addsource — Set source channel\n"
         f"/addtarget — Add target channels\n"
@@ -102,16 +103,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"/removeschedule — Remove a schedule\n"
         f"/mystatus — View your status\n"
         f"/plan — Check plan status\n\n"
-        f"*Paid Plan Needed:*\n"
+        f"<b>Paid Plan Needed:</b>\n"
         f"To activate real-time channel forwarding, please use /pro to purchase a plan and activate your account!"
     )
+    
+    text = get_content("welcome_msg", default_text).replace("{first_name}", first_name)
     
     image_path = IMAGES_DIR / "welcome.png"
     if image_path.exists():
         with open(image_path, "rb") as photo:
-            await update.message.reply_photo(photo=photo, caption=text, parse_mode="Markdown")
+            await update.message.reply_photo(photo=photo, caption=text, parse_mode="HTML")
     else:
-        await update.message.reply_text(text, parse_mode="Markdown")
+        await update.message.reply_text(text, parse_mode="HTML")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

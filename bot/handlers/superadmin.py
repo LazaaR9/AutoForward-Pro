@@ -40,6 +40,7 @@ from bot.db.users import (
     set_subscription,
     revoke_subscription,
 )
+from bot.db.content import set_content
 from bot.utils.roles import require_superadmin
 
 logger = logging.getLogger(__name__)
@@ -53,11 +54,13 @@ logger = logging.getLogger(__name__)
     REMOVEADMIN_WAIT,
     ADDINCOME_ADMINID_WAIT,
     ADDINCOME_AMOUNT_WAIT,
-) = range(5)
+    UPDATE_TEXT_WAIT,
+) = range(6)
 
 # Context keys
 _CTX_TARGET_USER = "target_user_id"
 _CTX_INCOME_ADMIN = "income_admin_id"
+_CTX_UPDATE_KEY = "update_content_key"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -393,6 +396,74 @@ async def addincome_amount_receive(update: Update, context: ContextTypes.DEFAULT
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# /update conversation (Dynamic CMS)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@require_superadmin
+async def update_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Welcome Message", callback_data="update_key:welcome_msg")],
+        [InlineKeyboardButton("Help - Link Account", callback_data="update_key:howtoauth")],
+        [InlineKeyboardButton("Help - Set Forwarding", callback_data="update_key:howtoaddforwarding")],
+        [InlineKeyboardButton("Help - Set Filters", callback_data="update_key:howtosetfilter")],
+        [InlineKeyboardButton("Help - Schedule Messages", callback_data="update_key:howtoschedule")],
+        [InlineKeyboardButton("Help - Premium Info", callback_data="update_key:howtopro")],
+    ])
+    await update.message.reply_text(
+        "📝 *Update Bot Content*\n\n"
+        "Select the message you want to update from the buttons below.\n\n"
+        "Send /cancel to abort.",
+        parse_mode="Markdown",
+        reply_markup=keyboard,
+    )
+    return UPDATE_TEXT_WAIT
+
+async def update_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    key = query.data.split(":", 1)[1]
+    context.user_data[_CTX_UPDATE_KEY] = key
+    
+    friendly_names = {
+        "welcome_msg": "Welcome Message",
+        "howtoauth": "Help - Link Account",
+        "howtoaddforwarding": "Help - Set Forwarding",
+        "howtosetfilter": "Help - Set Filters",
+        "howtoschedule": "Help - Schedule Messages",
+        "howtopro": "Help - Premium Info"
+    }
+    
+    await query.edit_message_text(
+        f"📝 *Updating: {friendly_names.get(key, key)}*\n\n"
+        f"Please send me the new text for this section now.\n"
+        f"You can use HTML formatting tags (like <b>bold</b>) or <tg-emoji> tags.\n\n"
+        f"Send /cancel to abort.",
+        parse_mode="HTML"
+    )
+    return UPDATE_TEXT_WAIT
+
+async def update_text_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    new_text = update.message.text
+    if not new_text:
+        await update.message.reply_text("❌ Please send text only.")
+        return UPDATE_TEXT_WAIT
+        
+    key = context.user_data.pop(_CTX_UPDATE_KEY, None)
+    if not key:
+        await update.message.reply_text("❌ Session expired. Please run /update again.")
+        return ConversationHandler.END
+        
+    success = set_content(key, new_text)
+    if success:
+        await update.message.reply_text("✅ *Content updated successfully!*", parse_mode="Markdown")
+    else:
+        await update.message.reply_text("❌ Failed to update content in database.", parse_mode="Markdown")
+        
+    return ConversationHandler.END
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # /cancel (shared)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -672,4 +743,17 @@ def register(application) -> None:
         },
         fallbacks=[cancel_handler],
         name="addincome",
+    ))
+    
+    # /update conversation
+    application.add_handler(ConversationHandler(
+        entry_points=[CommandHandler("update", update_start)],
+        states={
+            UPDATE_TEXT_WAIT: [
+                CallbackQueryHandler(update_key_callback, pattern=r"^update_key:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, update_text_receive),
+            ],
+        },
+        fallbacks=[cancel_handler],
+        name="update_content",
     ))

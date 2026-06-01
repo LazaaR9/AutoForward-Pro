@@ -84,3 +84,11 @@ CREATE INDEX IF NOT EXISTS idx_target_channels_admin_id ON target_channels(admin
 CREATE INDEX IF NOT EXISTS idx_filters_admin_id         ON filters(admin_id);
 CREATE INDEX IF NOT EXISTS idx_scheduled_admin_active   ON scheduled_messages(admin_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_users_role               ON users(role);
+
+-- ─────────────────────────────────────────────────────────────
+-- Table: bot_content (Dynamic texts)
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS bot_content (
+    content_key TEXT PRIMARY KEY,
+    content_value TEXT NOT NULL
+);

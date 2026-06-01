@@ -9,6 +9,7 @@ from pathlib import Path
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
+from bot.db.content import get_content
 
 logger = logging.getLogger(__name__)
 
@@ -80,14 +81,15 @@ async def _send_help_screen(update: Update, image_name: str, text: str) -> None:
         logger.error(f"Failed to send/edit help screen: {e}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = (
+    default_text = (
         f"<b>Help & Tutorials</b>\n\n"
         f"Click the buttons below to see how it works {ARROW}"
     )
+    text = get_content("help_msg", default_text)
     await _send_help_screen(update, "welcome.png", text)
 
 async def howtoauth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = (
+    default_text = (
         f"<b>How to Link Your Account</b>\n\n"
         f"{ARROW} Send the /authorize command.\n"
         f"{ARROW} Reply with your Telegram Phone Number (include country code, e.g. +91...).\n"
@@ -96,20 +98,22 @@ async def howtoauth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         f"{ARROW} If you have 2-Step Verification enabled, it will ask for your password.\n\n"
         f"{CHECK} Once done, your account is linked and ready to forward!"
     )
+    text = get_content("howtoauth", default_text)
     await _send_help_screen(update, "auth.png", text)
 
 async def howtoaddforwarding_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = (
+    default_text = (
         f"<b>How to Set Up Forwarding</b>\n\n"
         f"{ARROW} Send the /addsource command and provide the channel username or ID from where you want to copy messages.\n"
         f"{ARROW} Send the /addtarget command and provide the channel username or ID to where you want the messages forwarded.\n"
         f"{ARROW} You can add multiple targets by repeating /addtarget.\n\n"
         f"{CHECK} The bot will now instantly copy any new message from your Source to all your Targets!"
     )
+    text = get_content("howtoaddforwarding", default_text)
     await _send_help_screen(update, "set_forwarding.png", text)
 
 async def howtosetfilter_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = (
+    default_text = (
         f"<b>How to Set Filters</b>\n\n"
         f"Use /filter to change text or block messages entirely.\n\n"
         f"{ARROW} <b>Replace Links:</b> Choose 'Replace Any Link', provide your new link. Every link in the source message will become your link.\n"
@@ -118,10 +122,11 @@ async def howtosetfilter_command(update: Update, context: ContextTypes.DEFAULT_T
         f"{ARROW} <b>Block Words:</b> Choose 'Block Message if Contains', provide a word. If the source message has this word, it will <b>not</b> be forwarded.\n\n"
         f"{THUMB} Use /myfilters to see or delete your active rules."
     )
+    text = get_content("howtosetfilter", default_text)
     await _send_help_screen(update, "filter.png", text)
 
 async def howtoschedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = (
+    default_text = (
         f"<b>How to Schedule Messages</b>\n\n"
         f"{ARROW} Send /schedule.\n"
         f"{ARROW} The bot will ask for the message content. Send text, links, or media.\n"
@@ -129,10 +134,11 @@ async def howtoschedule_command(update: Update, context: ContextTypes.DEFAULT_TY
         f"{ARROW} Choose if it should repeat 'Daily' or just run 'One-time'.\n\n"
         f"{CHECK} Use /removeschedule to cancel scheduled messages."
     )
+    text = get_content("howtoschedule", default_text)
     await _send_help_screen(update, "schedule.png", text)
 
 async def howtopro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = (
+    default_text = (
         f"<b>How to Get Premium</b>\n\n"
         f"{DIAMOND} Send /pro at any time to view the plans.\n"
         f"{ARROW} Select your preferred plan (1 Month, 3 Months, or 6 Months).\n"
@@ -141,6 +147,7 @@ async def howtopro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"{CHECK} Click \"I've Paid\" and contact support with your screenshot if required.\n\n"
         f"{HSHAKE} Premium unlocks all advanced features {HEART}"
     )
+    text = get_content("howtopro", default_text)
     await _send_help_screen(update, "pro.png", text)
 
 async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
