@@ -1,6 +1,6 @@
 """
 bot/handlers/help.py
-Help menu and step-by-step tutorial handlers.
+Help menu and step-by-step tutorial handlers with Premium custom emojis.
 """
 
 import logging
@@ -19,13 +19,21 @@ IMAGES_DIR = BASE_DIR / "images"
 # Global dictionary to cache uploaded photo file_ids for instant performance
 _PHOTO_CACHE = {}
 
+# Premium Custom Emojis (HTML)
+HSHAKE = '<tg-emoji emoji-id="5456371000239212004">🤝</tg-emoji>'
+HEART = '<tg-emoji emoji-id="5285439518130857782">❤️</tg-emoji>'
+THUMB = '<tg-emoji emoji-id="5413482938585063042">👍</tg-emoji>'
+DIAMOND = '<tg-emoji emoji-id="5796205953913196373">💎</tg-emoji>'
+CHECK = '<tg-emoji emoji-id="5217497254381754877">✅</tg-emoji>'
+ARROW = '<tg-emoji emoji-id="5215720576735255650">➡️</tg-emoji>'
+
 def get_help_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("[1] Link Account", callback_data="help_cmd:/howtoauth")],
-        [InlineKeyboardButton("[2] Set Forwarding", callback_data="help_cmd:/howtoaddforwarding")],
-        [InlineKeyboardButton("[3] Set Filters", callback_data="help_cmd:/howtosetfilter")],
-        [InlineKeyboardButton("[4] Schedule Messages", callback_data="help_cmd:/howtoschedule")],
-        [InlineKeyboardButton("[5] Premium Info", callback_data="help_cmd:/howtopro")],
+        [InlineKeyboardButton("Link Account", callback_data="help_cmd:/howtoauth")],
+        [InlineKeyboardButton("Set Forwarding", callback_data="help_cmd:/howtoaddforwarding")],
+        [InlineKeyboardButton("Set Filters", callback_data="help_cmd:/howtosetfilter")],
+        [InlineKeyboardButton("Schedule Messages", callback_data="help_cmd:/howtoschedule")],
+        [InlineKeyboardButton("Premium Info", callback_data="help_cmd:/howtopro")],
     ])
 
 async def _send_help_screen(update: Update, image_name: str, text: str) -> None:
@@ -42,96 +50,96 @@ async def _send_help_screen(update: Update, image_name: str, text: str) -> None:
             if query and msg and msg.photo:
                 # We are in a callback query from a previous photo message, so edit the media!
                 await query.edit_message_media(
-                    media=InputMediaPhoto(media=file_id, caption=text, parse_mode="Markdown"),
+                    media=InputMediaPhoto(media=file_id, caption=text, parse_mode="HTML"),
                     reply_markup=keyboard
                 )
             else:
-                await msg.reply_photo(photo=file_id, caption=text, parse_mode="Markdown", reply_markup=keyboard)
+                await msg.reply_photo(photo=file_id, caption=text, parse_mode="HTML", reply_markup=keyboard)
         else:
             # Slow path: need to read from disk and upload
             if image_path.exists():
                 with open(image_path, "rb") as f:
                     if query and msg and msg.photo:
                         res = await query.edit_message_media(
-                            media=InputMediaPhoto(media=f, caption=text, parse_mode="Markdown"),
+                            media=InputMediaPhoto(media=f, caption=text, parse_mode="HTML"),
                             reply_markup=keyboard
                         )
                         if res and hasattr(res, 'photo') and res.photo:
                             _PHOTO_CACHE[image_name] = res.photo[-1].file_id
                     else:
-                        res = await msg.reply_photo(photo=f, caption=text, parse_mode="Markdown", reply_markup=keyboard)
+                        res = await msg.reply_photo(photo=f, caption=text, parse_mode="HTML", reply_markup=keyboard)
                         if res and hasattr(res, 'photo') and res.photo:
                             _PHOTO_CACHE[image_name] = res.photo[-1].file_id
             else:
                 # Fallback if image doesn't exist on disk
                 if query:
-                    await query.edit_message_text(text=text, parse_mode="Markdown", reply_markup=keyboard)
+                    await query.edit_message_text(text=text, parse_mode="HTML", reply_markup=keyboard)
                 else:
-                    await msg.reply_text(text=text, parse_mode="Markdown", reply_markup=keyboard)
+                    await msg.reply_text(text=text, parse_mode="HTML", reply_markup=keyboard)
     except Exception as e:
         logger.error(f"Failed to send/edit help screen: {e}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "*Help & Tutorials*\n\n"
-        "Click the buttons below to see how it works:"
+        f"<b>Help & Tutorials</b>\n\n"
+        f"Click the buttons below to see how it works {ARROW}"
     )
     await _send_help_screen(update, "welcome.png", text)
 
 async def howtoauth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "*How to Link Your Account*\n\n"
-        "[1] Send the /authorize command.\n"
-        "[2] Reply with your Telegram Phone Number (include country code, e.g. +91...).\n"
-        "[3] Telegram will send you a 5-digit login code in your official Telegram app.\n"
-        "[4] *IMPORTANT:* Send the code with a hyphen (e.g., `12-345`) to bypass Telegram's anti-bot security!\n"
-        "[5] If you have 2-Step Verification enabled, it will ask for your password.\n\n"
-        "- Once done, your account is linked and ready to forward!"
+        f"<b>How to Link Your Account</b>\n\n"
+        f"{ARROW} Send the /authorize command.\n"
+        f"{ARROW} Reply with your Telegram Phone Number (include country code, e.g. +91...).\n"
+        f"{ARROW} Telegram will send you a 5-digit login code in your official Telegram app.\n"
+        f"{ARROW} <b>IMPORTANT:</b> Send the code with a hyphen (e.g., <code>12-345</code>) to bypass Telegram's anti-bot security!\n"
+        f"{ARROW} If you have 2-Step Verification enabled, it will ask for your password.\n\n"
+        f"{CHECK} Once done, your account is linked and ready to forward!"
     )
     await _send_help_screen(update, "auth.png", text)
 
 async def howtoaddforwarding_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "*How to Set Up Forwarding*\n\n"
-        "[1] Send the /addsource command and provide the channel username or ID from where you want to copy messages.\n"
-        "[2] Send the /addtarget command and provide the channel username or ID to where you want the messages forwarded.\n"
-        "[3] You can add multiple targets by repeating /addtarget.\n\n"
-        "- The bot will now instantly copy any new message from your Source to all your Targets!"
+        f"<b>How to Set Up Forwarding</b>\n\n"
+        f"{ARROW} Send the /addsource command and provide the channel username or ID from where you want to copy messages.\n"
+        f"{ARROW} Send the /addtarget command and provide the channel username or ID to where you want the messages forwarded.\n"
+        f"{ARROW} You can add multiple targets by repeating /addtarget.\n\n"
+        f"{CHECK} The bot will now instantly copy any new message from your Source to all your Targets!"
     )
     await _send_help_screen(update, "set_forwarding.png", text)
 
 async def howtosetfilter_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "*How to Set Filters*\n\n"
-        "Use /filter to change text or block messages entirely.\n\n"
-        "[1] *Replace Links:* Choose 'Replace Any Link', provide your new link. Every link in the source message will become your link.\n"
-        "[2] *Replace Usernames:* Choose 'Replace Any Username', provide your username (e.g., `@MyChannel`). All usernames will be replaced.\n"
-        "[3] *Replace Specific Text:* Choose 'Replace Custom Text', provide the exact text to find, then the text to replace it with.\n"
-        "[4] *Block Words:* Choose 'Block Message if Contains', provide a word. If the source message has this word, it will *not* be forwarded.\n\n"
-        "Use /myfilters to see or delete your active rules."
+        f"<b>How to Set Filters</b>\n\n"
+        f"Use /filter to change text or block messages entirely.\n\n"
+        f"{ARROW} <b>Replace Links:</b> Choose 'Replace Any Link', provide your new link. Every link in the source message will become your link.\n"
+        f"{ARROW} <b>Replace Usernames:</b> Choose 'Replace Any Username', provide your username (e.g., <code>@MyChannel</code>). All usernames will be replaced.\n"
+        f"{ARROW} <b>Replace Specific Text:</b> Choose 'Replace Custom Text', provide the exact text to find, then the text to replace it with.\n"
+        f"{ARROW} <b>Block Words:</b> Choose 'Block Message if Contains', provide a word. If the source message has this word, it will <b>not</b> be forwarded.\n\n"
+        f"{THUMB} Use /myfilters to see or delete your active rules."
     )
     await _send_help_screen(update, "filter.png", text)
 
 async def howtoschedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "*How to Schedule Messages*\n\n"
-        "[1] Send /schedule.\n"
-        "[2] The bot will ask for the message content. Send text, links, or media.\n"
-        "[3] It will ask for the Time. You can use formats like `14:30`, `02:30 PM`, or even `02:30 PM IND` to use Indian time!\n"
-        "[4] Choose if it should repeat 'Daily' or just run 'One-time'.\n\n"
-        "Use /removeschedule to cancel scheduled messages."
+        f"<b>How to Schedule Messages</b>\n\n"
+        f"{ARROW} Send /schedule.\n"
+        f"{ARROW} The bot will ask for the message content. Send text, links, or media.\n"
+        f"{ARROW} It will ask for the Time. You can use formats like <code>14:30</code>, <code>02:30 PM</code>, or even <code>02:30 PM IND</code> to use Indian time!\n"
+        f"{ARROW} Choose if it should repeat 'Daily' or just run 'One-time'.\n\n"
+        f"{CHECK} Use /removeschedule to cancel scheduled messages."
     )
     await _send_help_screen(update, "schedule.png", text)
 
 async def howtopro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "*How to Get Premium*\n\n"
-        "[1] Send /pro at any time to view the plans.\n"
-        "[2] Select your preferred plan (1 Month, 3 Months, or 6 Months).\n"
-        "[3] Choose your payment method (INR via UPI/Razorpay or USDT Crypto).\n"
-        "[4] Complete the payment using the provided links or addresses.\n"
-        "[5] Click \"I've Paid\" and contact support with your screenshot if required.\n\n"
-        "Premium unlocks all advanced features!"
+        f"<b>How to Get Premium</b>\n\n"
+        f"{DIAMOND} Send /pro at any time to view the plans.\n"
+        f"{ARROW} Select your preferred plan (1 Month, 3 Months, or 6 Months).\n"
+        f"{ARROW} Choose your payment method (INR via UPI/Razorpay or USDT Crypto).\n"
+        f"{ARROW} Complete the payment using the provided links or addresses.\n"
+        f"{CHECK} Click \"I've Paid\" and contact support with your screenshot if required.\n\n"
+        f"{HSHAKE} Premium unlocks all advanced features {HEART}"
     )
     await _send_help_screen(update, "pro.png", text)
 
