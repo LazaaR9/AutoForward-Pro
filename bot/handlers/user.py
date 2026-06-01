@@ -88,10 +88,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Regular user — show greeting, all admin commands, and premium call-to-action
     sa_uname = _get_superadmin_username()
+    first_name = tg_user.first_name or "User"
     text = (
-        f"👋 *Welcome to the Auto Forward Bot!*\n\n"
-        f"👉 *Start Here:* Send /help to see step-by-step image tutorials on how to use the bot!\n\n"
-        f"📋 *Available Commands:*\n"
+        f"*Welcome {first_name} to the Auto Forward Bot!*\n\n"
+        f">> *Start Here:* Send /help to see step-by-step image tutorials on how to use the bot!\n\n"
+        f"*Available Commands:*\n"
         f"/authorize — Link your Telegram account (Required)\n"
         f"/addsource — Set source channel\n"
         f"/addtarget — Add target channels\n"
@@ -101,7 +102,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"/removeschedule — Remove a schedule\n"
         f"/mystatus — View your status\n"
         f"/plan — Check plan status\n\n"
-        f"⭐ *Paid Plan Needed:*\n"
+        f"*Paid Plan Needed:*\n"
         f"To activate real-time channel forwarding, please use /pro to purchase a plan and activate your account!"
     )
     
