@@ -33,6 +33,13 @@ from bot.db import channels as channels_db
 from bot.db import transactions as tx_db
 from bot.db import users as users_db
 from bot.db.transactions import log_transaction
+from bot.db.users import (
+    get_active_subscriptions,
+    get_expiring_soon_admins,
+    get_expired_admins,
+    set_subscription,
+    revoke_subscription,
+)
 from bot.utils.roles import require_superadmin
 
 logger = logging.getLogger(__name__)
@@ -396,6 +403,215 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# /admin_subscriptions
+# ─────────────────────────────────────────────────────────────────────────────
+
+@require_superadmin
+async def admin_subscriptions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show active, expiring soon, and expired subscription report."""
+    now = datetime.now(timezone.utc)
+
+    active = get_active_subscriptions()
+    expiring = get_expiring_soon_admins(days=3)
+    expired = get_expired_admins()
+
+    expiring_ids = {u["user_id"] for u in expiring}
+    true_active = [u for u in active if u["user_id"] not in expiring_ids]
+
+    def _fmt_user(u: dict) -> str:
+        uname = f"@{u['username']}" if u.get("username") else f"ID {u['user_id']}"
+        sub_end_str = u.get("subscription_end")
+        sub_end = datetime.fromisoformat(sub_end_str) if sub_end_str else None
+        if sub_end and sub_end.tzinfo is None:
+            sub_end = sub_end.replace(tzinfo=timezone.utc)
+        days_left = max(0, (sub_end - now).days) if sub_end else 0
+        plan = (u.get("subscription_plan") or "—").replace("_", " ").title()
+        method = (u.get("payment_method") or "—").upper()
+        exp_str = sub_end.strftime("%d/%m/%Y") if sub_end else "N/A"
+        return f"`{u['user_id']}` {uname}\n   Plan: {plan} | {method} | Expires: {exp_str} ({days_left}d)"
+
+    lines = ["📊 *Subscription Report*\n"]
+
+    lines.append(f"✅ *Active* — {len(true_active)} user(s)")
+    if true_active:
+        for u in true_active:
+            lines.append(_fmt_user(u))
+    else:
+        lines.append("  _None_")
+
+    lines.append(f"\n⚠️ *Expiring Soon* (≤3 days) — {len(expiring)} user(s)")
+    if expiring:
+        for u in expiring:
+            lines.append(_fmt_user(u))
+    else:
+        lines.append("  _None_")
+
+    lines.append(f"\n❌ *Expired* — {len(expired)} user(s)")
+    if expired:
+        for u in expired[:10]:  # cap at 10 to avoid message length limits
+            lines.append(_fmt_user(u))
+        if len(expired) > 10:
+            lines.append(f"  _...and {len(expired) - 10} more_")
+    else:
+        lines.append("  _None_")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /grant_premium USER_ID DAYS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@require_superadmin
+async def grant_premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /grant_premium USER_ID DAYS
+    Manually grant premium access to a user for the given number of days.
+    """
+    args = context.args
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            "❌ Usage: `/grant_premium USER_ID DAYS`\n"
+            "Example: `/grant_premium 123456789 30`",
+            parse_mode="Markdown",
+        )
+        return
+
+    try:
+        target_id = int(args[0])
+        days = int(args[1])
+        if days <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Invalid arguments. USER_ID and DAYS must be positive integers.\n"
+            "Example: `/grant_premium 123456789 30`",
+            parse_mode="Markdown",
+        )
+        return
+
+    user = users_db.get_user(target_id)
+    if user is None:
+        await update.message.reply_text(
+            f"❌ User `{target_id}` not found. They must send /start first.",
+            parse_mode="Markdown",
+        )
+        return
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=days)
+
+    # Determine plan label from days
+    if days <= 30:
+        plan = "1_month"
+    elif days <= 90:
+        plan = "3_months"
+    elif days <= 180:
+        plan = "6_months"
+    else:
+        plan = "manual"
+
+    set_subscription(
+        user_id=target_id,
+        plan=plan,
+        start_dt=now,
+        end_dt=expires_at,
+        payment_method="manual",
+        amount=0.0,
+        payment_status="paid",
+    )
+    log_transaction(target_id, 0.0, days, now, expires_at)
+
+    username = f"@{user['username']}" if user.get("username") else f"ID {target_id}"
+
+    # Notify user
+    try:
+        await context.bot.send_message(
+            chat_id=target_id,
+            text=(
+                f"✅ *Payment Successful*\n\n"
+                f"Your premium membership has been activated.\n\n"
+                f"📦 Plan: *{plan.replace('_', ' ').title()}* ({days} days)\n"
+                f"📅 Expires: `{expires_at.strftime('%d/%m/%Y')}`\n\n"
+                f"Thank you for your support \u2764\ufe0f"
+            ),
+            parse_mode="Markdown",
+        )
+    except Exception as exc:
+        logger.warning("Could not notify user %s: %s", target_id, exc)
+
+    await update.message.reply_text(
+        f"✅ *Premium granted!*\n\n"
+        f"User: *{username}* (`{target_id}`)\n"
+        f"Plan: *{plan.replace('_', ' ').title()}*\n"
+        f"Duration: *{days} days*\n"
+        f"Expires: `{expires_at.strftime('%d/%m/%Y')}`",
+        parse_mode="Markdown",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /revoke_premium USER_ID
+# ─────────────────────────────────────────────────────────────────────────────
+
+@require_superadmin
+async def revoke_premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /revoke_premium USER_ID
+    Immediately remove premium access from a user.
+    """
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "❌ Usage: `/revoke_premium USER_ID`\n"
+            "Example: `/revoke_premium 123456789`",
+            parse_mode="Markdown",
+        )
+        return
+
+    try:
+        target_id = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ Invalid USER_ID. Must be a numeric Telegram user ID.")
+        return
+
+    user = users_db.get_user(target_id)
+    if user is None:
+        await update.message.reply_text(f"❌ User `{target_id}` not found.", parse_mode="Markdown")
+        return
+
+    if user["role"] not in ("admin", "superadmin"):
+        await update.message.reply_text(
+            f"ℹ️ User `{target_id}` does not have an active premium subscription.",
+            parse_mode="Markdown",
+        )
+        return
+
+    revoke_subscription(target_id)
+
+    username = f"@{user['username']}" if user.get("username") else f"ID {target_id}"
+
+    # Notify user
+    try:
+        await context.bot.send_message(
+            chat_id=target_id,
+            text=(
+                "⚠️ *Your premium membership has expired.*\n\n"
+                "Renew to continue using premium features.\n"
+                "Use /pro to view plans and upgrade."
+            ),
+            parse_mode="Markdown",
+        )
+    except Exception as exc:
+        logger.warning("Could not notify revoked user %s: %s", target_id, exc)
+
+    await update.message.reply_text(
+        f"✅ Premium access revoked for *{username}* (`{target_id}`).",
+        parse_mode="Markdown",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Handler registration
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -406,6 +622,11 @@ def register(application) -> None:
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("alladmins", alladmins_command))
     application.add_handler(CommandHandler("allchannels", allchannels_command))
+
+    # Subscription management commands
+    application.add_handler(CommandHandler("admin_subscriptions", admin_subscriptions_command))
+    application.add_handler(CommandHandler("grant_premium", grant_premium_command))
+    application.add_handler(CommandHandler("revoke_premium", revoke_premium_command))
 
     # /addadmin conversation (has CallbackQueryHandler in state — per_message=False is correct)
     with warnings.catch_warnings():

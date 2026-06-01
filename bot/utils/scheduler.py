@@ -21,7 +21,7 @@ from telegram import Bot
 
 from bot.db.channels import get_target_channels
 from bot.db.schedules import deactivate_schedule, get_all_active_schedules
-from bot.db.users import get_expired_admins, set_role
+from bot.db.users import get_expired_admins, set_role, revoke_subscription
 from bot.db.users import get_user
 
 logger = logging.getLogger(__name__)
@@ -164,25 +164,25 @@ def bootstrap_schedules(bot: Bot) -> None:
 async def _check_expired_subscriptions(bot: Bot) -> None:
     """
     Runs every hour. Demotes admins whose subscription_end has passed.
-    Sends a notification to the demoted admin.
+    Clears all subscription fields and sends a notification to the user.
     """
     expired = get_expired_admins()
     for user in expired:
         user_id = user["user_id"]
-        set_role(user_id, "user")
+        revoke_subscription(user_id)  # clears role + all subscription/payment fields
         logger.info("Auto-demoted admin %s (subscription expired).", user_id)
         try:
             await bot.send_message(
                 chat_id=user_id,
                 text=(
-                    "⏰ *Your admin subscription has expired.*\n\n"
-                    "You have been moved back to a regular user. "
-                    "Contact the Super Admin to renew your plan."
+                    "⚠️ *Your premium membership has expired.*\n\n"
+                    "Renew to continue using premium features.\n"
+                    "Use /pro to view plans and upgrade."
                 ),
                 parse_mode="Markdown",
             )
         except Exception as exc:
-            logger.warning("Could not notify demoted admin %s: %s", user_id, exc)
+            logger.warning("Could not notify expired admin %s: %s", user_id, exc)
 
 
 def start_expiry_checker(bot: Bot) -> None:

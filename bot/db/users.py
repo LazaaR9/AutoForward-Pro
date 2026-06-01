@@ -114,3 +114,82 @@ def get_all_users_count() -> int:
     db = get_client()
     res = db.table("users").select("user_id", count="exact").execute()
     return res.count or 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Subscription management (payment system)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def set_subscription(
+    user_id: int,
+    plan: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    payment_method: str,
+    amount: float,
+    payment_status: str = "paid",
+) -> None:
+    """
+    Atomically promote user to admin and record full subscription details.
+    plan: '1_month' | '3_months' | '6_months' | 'manual'
+    payment_method: 'inr' | 'usdt' | 'manual'
+    """
+    db = get_client()
+    db.table("users").update({
+        "role": "admin",
+        "subscription_plan": plan,
+        "subscription_start": start_dt.isoformat(),
+        "subscription_end": end_dt.isoformat(),
+        "payment_method": payment_method,
+        "payment_amount": amount,
+        "payment_status": payment_status,
+    }).eq("user_id", user_id).execute()
+
+
+def revoke_subscription(user_id: int) -> None:
+    """
+    Demote user to 'user' role and clear all subscription/payment fields.
+    """
+    db = get_client()
+    db.table("users").update({
+        "role": "user",
+        "subscription_plan": None,
+        "subscription_start": None,
+        "subscription_end": None,
+        "payment_method": None,
+        "payment_amount": None,
+        "payment_status": None,
+    }).eq("user_id", user_id).execute()
+
+
+def get_active_subscriptions() -> list[dict]:
+    """Return all admins with an active (non-expired) subscription."""
+    db = get_client()
+    now_iso = _now().isoformat()
+    res = (
+        db.table("users")
+        .select("*")
+        .eq("role", "admin")
+        .gt("subscription_end", now_iso)
+        .order("subscription_end")
+        .execute()
+    )
+    return res.data or []
+
+
+def get_expiring_soon_admins(days: int = 3) -> list[dict]:
+    """Return admins whose subscription expires within `days` days."""
+    from datetime import timedelta
+    db = get_client()
+    now_iso = _now().isoformat()
+    soon_iso = (_now() + timedelta(days=days)).isoformat()
+    res = (
+        db.table("users")
+        .select("*")
+        .eq("role", "admin")
+        .gt("subscription_end", now_iso)
+        .lte("subscription_end", soon_iso)
+        .order("subscription_end")
+        .execute()
+    )
+    return res.data or []

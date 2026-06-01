@@ -24,13 +24,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from telegram.ext import Application
 
 from bot.config import BOT_TOKEN
-from bot.handlers import admin, forwarding, superadmin, user
+from bot.handlers import admin, forwarding, superadmin, user, payment
 from bot.utils import userbot_manager
 from bot.utils.scheduler import (
     bootstrap_schedules,
     start_expiry_checker,
     start_scheduler,
 )
+from bot.webhook.razorpay_webhook import start_webhook_server, stop_webhook_server
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -97,6 +98,9 @@ async def post_init(application: Application) -> None:
     # Start all active background Telethon sessions
     await userbot_manager.start_all_userbots(bot)
 
+    # Start Razorpay webhook HTTP server (same event loop as the bot)
+    await start_webhook_server(bot)
+
     # Log bot info
     me = await bot.get_me()
     logger.info("Bot started: @%s (ID: %s)", me.username, me.id)
@@ -104,9 +108,10 @@ async def post_init(application: Application) -> None:
 
 
 async def post_shutdown(application: Application) -> None:
-    """Called during application shutdown. Gracefully stop all Telethon userbots."""
+    """Called during application shutdown. Gracefully stop all background services."""
     logger.info("Stopping all background userbot sessions...")
     await userbot_manager.stop_all_userbots()
+    await stop_webhook_server()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -133,7 +138,10 @@ def build_application() -> Application:
     # 3. User handlers (/start, /plan)
     user.register(app)
 
-    # 4. Forwarding (group=1 — lower priority, channel posts only)
+    # 4. Payment handlers (/pro, plan selection, INR, USDT)
+    payment.register(app)
+
+    # 5. Forwarding (group=1 — lower priority, channel posts only)
     forwarding.register(app)
 
     return app

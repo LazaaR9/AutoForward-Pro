@@ -159,56 +159,6 @@ async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# /pro
-# ─────────────────────────────────────────────────────────────────────────────
-
-async def pro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show premium plans and payment methods."""
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Yes", callback_data="pro_yes"),
-            InlineKeyboardButton("❌ No", callback_data="pro_no")
-        ]
-    ]
-    await update.message.reply_text(
-        "⭐ *Upgrade to Premium*\n\n"
-        "Unlock professional features like unlimited forwarding, content filtering, and message scheduling!\n\n"
-        "📋 *Plans:*\n"
-        "• *1 month:* 88₹ (2.9₹ per day)\n"
-        "• *2 months:* 150₹ (2.5₹ per day)\n\n"
-        "💳 *Payment Methods:*\n\n"
-        "*Binance Pay ID:*\n"
-        "`212753448`\n\n"
-        "*Crypto (BEP20 Address):*\n"
-        "`0x565f64c9edc74e60ae4ca24c816b25d10dd9bdf6`\n\n"
-        "*Crypto (TRC20 Address):*\n"
-        "`TMjuAXzEfvLuzxQv9CrtPWy4m6jA2QxvHf`\n\n"
-        "_(Tap the ID/Address to copy it)_\n\n"
-        "🇮🇳 *UPI Payment:*\n"
-        "If you want to pay with UPI, please contact @Savvyop\n\n"
-        "❓ *Did you done payment?*",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def pro_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    
-    if query.data == "pro_yes":
-        await query.edit_message_text(
-            "✅ *Payment Done!*\n\n"
-            "Please send your payment screenshot to @Savvyop and verify with Savvy.\n"
-            "Once verified, you will be made an Admin and can use all the bot commands!",
-            parse_mode="Markdown"
-        )
-    elif query.data == "pro_no":
-        await query.edit_message_text(
-            "ℹ️ No problem! You can use the /pro command anytime to view the plans and upgrade.",
-            parse_mode="Markdown"
-        )
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -230,5 +180,5 @@ def _get_superadmin_username() -> str:
 def register(application) -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("plan", plan_command))
-    application.add_handler(CommandHandler("pro", pro_command))
-    application.add_handler(CallbackQueryHandler(pro_callback, pattern=r"^pro_"))
+    # /pro is now registered in bot/handlers/payment.py
+
