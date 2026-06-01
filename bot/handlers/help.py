@@ -4,6 +4,7 @@ Help menu and step-by-step tutorial handlers.
 """
 
 import logging
+import os
 from pathlib import Path
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -11,18 +12,14 @@ from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
 
 logger = logging.getLogger(__name__)
 
-IMAGES_DIR = Path("/Users/nishuldhakar/Dev/auto-forword-bot/images")
+# Dynamically resolve the absolute path to the images folder
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+IMAGES_DIR = BASE_DIR / "images"
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
         "📚 *Help & Tutorials*\n\n"
-        "Welcome to the Auto Forward Bot help center! "
-        "Click any of the commands below to see a step-by-step tutorial with images on how to use that feature:\n\n"
-        "🔑 /howtoauth — How to link your Telegram account\n"
-        "📡 /howtoaddforwarding — How to set up source and target channels\n"
-        "🔧 /howtosetfilter — How to set up text replacements and blocks\n"
-        "⏰ /howtoschedule — How to schedule automated messages\n"
-        "💎 /howtopro — How to buy and activate Premium"
+        "Click the buttons below to see how it works:"
     )
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔑 Link Account", callback_data="help_cmd:/howtoauth")],
