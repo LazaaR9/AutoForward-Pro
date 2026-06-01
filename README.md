@@ -1,136 +1,122 @@
-# Telegram Channel Forwarding Bot
+# Auto Forward Bot Pro
 
-A production-ready Telegram bot with role-based access control, channel message forwarding, text filters, APScheduler-based scheduling, and a subscription/trial system — built with **python-telegram-bot v20+** and **Supabase**.
+![Welcome](images/welcome.png)
+
+A production-ready Telegram bot that acts as your personal automated forwarding assistant. Built with **python-telegram-bot v20+**, **Telethon** (Userbot), and **Supabase**, this bot offers role-based access control, real-time message forwarding from both public and private channels, advanced dynamic text filters, message scheduling, and an integrated premium subscription system.
 
 ---
 
-## Features
+## 🌟 Key Features
 
 | Feature | Details |
 |---|---|
-| 🔁 Real-time forwarding | All message types: text, photo, video, audio, document, sticker, animation, voice, poll, etc. |
-| 🔍 Text filters | Admin-defined find/replace rules applied before forwarding (text + captions) |
-| ⏰ Scheduling | One-time or daily recurring messages sent to target channels |
-| 👥 Role system | Super Admin → Admin → User with trial and subscription management |
-| 💰 Income tracking | Manually log payments; view stats via `/stats` |
-| ⚡ Auto-demotion | Hourly check demotes expired admins automatically |
+| 🔁 **Real-time Forwarding** | Forward all message types instantly. Supports both **Public** and **Private** source channels using an integrated Userbot system! |
+| 🔍 **Dynamic Text Filters** | Automatically replace *any* link or *any* username in a message with your own, or define specific find/replace text rules and blocked words. |
+| ⏰ **Scheduling** | Schedule messages to be sent one-time or daily. Supports IST (Indian Standard Time) and UTC formats natively. |
+| 💳 **Integrated Payments** | Automated Razorpay integration and Crypto (USDT) support. Users can upgrade to Premium seamlessly inside the bot via `/pro`. |
+| 👥 **Role & Trial System** | Trial users are prompted to upgrade. Admins gain access to forwarding capabilities. Super Admin can manage all users. |
+| ⚡ **Auto-Demotion** | The bot checks for expired subscriptions continuously and demotes admins automatically. |
 
 ---
 
-## Project Structure
+## 📖 How to Use (Step-by-Step)
 
-```
-auto-forword-bot/
-├── bot/
-│   ├── __init__.py
-│   ├── main.py              # Entry point
-│   ├── config.py            # Env var loader
-│   ├── db/
-│   │   ├── supabase_client.py
-│   │   ├── users.py
-│   │   ├── channels.py
-│   │   ├── filters.py
-│   │   ├── schedules.py
-│   │   └── transactions.py
-│   ├── utils/
-│   │   ├── roles.py         # Role guard decorators
-│   │   ├── filters.py       # Filter application logic
-│   │   └── scheduler.py     # APScheduler wrapper
-│   └── handlers/
-│       ├── user.py          # /start, /plan
-│       ├── admin.py         # /addsource, /addtarget, /filter, /schedule, etc.
-│       ├── superadmin.py    # /stats, /addadmin, /removeadmin, etc.
-│       └── forwarding.py    # Core forwarding engine
-├── supabase_schema.sql      # Run this in Supabase SQL editor first
-├── requirements.txt
-├── .env.example
-└── README.md
-```
+The bot comes with a built-in interactive `/help` menu to guide users. Here is how the core features work:
+
+### 1. Link Your Account (`/howtoauth`)
+To forward messages from private channels, the bot securely links to your Telegram account.
+![Authorization](images/auth.png)
+- Run `/authorize` and provide your phone number (e.g., `+91...`).
+- Submit the 5-digit OTP sent by Telegram (use a hyphen like `12-345` for security).
+
+### 2. Set Up Forwarding (`/howtoaddforwarding`)
+![Set Forwarding](images/set_forwarding.png)
+- Run `/addsource` and provide the channel username or ID to copy *from*.
+- Run `/addtarget` to specify where messages should be forwarded *to*. You can add multiple targets!
+
+### 3. Set Up Dynamic Filters (`/howtosetfilter`)
+![Filters](images/filter.png)
+- Run `/filter` to open the interactive menu.
+- Choose to instantly replace **Any Link**, **Any Username**, or set up custom word replacements and blocks. 
+
+### 4. Schedule Messages (`/howtoschedule`)
+![Schedule](images/schedule.png)
+- Run `/schedule`, provide your content, and set a time (e.g., `14:30`, `12:00 PM`, `05:30 PM IND`).
+- Choose whether it should repeat daily or run just once.
+
+### 5. Upgrade to Premium (`/howtopro`)
+![Premium](images/pro.png)
+- Run `/pro` to view subscription plans.
+- Pay via INR (UPI/Razorpay) or Crypto (USDT) and confirm payment directly inside the bot.
 
 ---
 
-## Setup
+## ⚙️ Setup & Installation
 
 ### 1. Clone and install dependencies
-
 ```bash
+git clone https://github.com/yourusername/auto-forword-bot.git
 cd auto-forword-bot
 python -m venv venv
 source venv/bin/activate    # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Configure environment
-
+### 2. Configure environment variables
 ```bash
 cp .env.example .env
 ```
-
 Edit `.env` with your values:
-
 ```env
 BOT_TOKEN=your_bot_token_here         # From @BotFather
+TELEGRAM_API_ID=1234567               # From my.telegram.org
+TELEGRAM_API_HASH=your_api_hash       # From my.telegram.org
 SUPABASE_URL=https://xxx.supabase.co  # Your Supabase project URL
 SUPABASE_KEY=your_supabase_key_here   # anon or service_role key
-SUPER_ADMIN_ID=123456789              # Your Telegram user ID (from @userinfobot)
+SUPER_ADMIN_ID=123456789              # Your Telegram user ID
+RAZORPAY_KEY_ID=optional_key          # For automated INR payments
+RAZORPAY_KEY_SECRET=optional_secret
 ```
 
-### 3. Set up Supabase database
-
+### 3. Set up Supabase Database
 1. Open your [Supabase project](https://supabase.com) → SQL Editor
-2. Copy and run the entire contents of `supabase_schema.sql`
+2. Run the provided `supabase_schema.sql` script to create the tables.
 
-### 4. Add the bot to your channels
-
-For **source channels**: Add the bot as an **Admin** (needs to read all messages).
-For **target channels**: Add the bot as an **Admin** (needs to post messages).
-
-### 5. Run the bot
-
+### 4. Run the Bot
 ```bash
 python3 -m bot.main
 ```
 
 ---
 
-## Commands Reference
+## 🛠 Commands Reference
 
 ### Super Admin (`SUPER_ADMIN_ID`)
-
 | Command | Description |
 |---|---|
-| `/stats` | Total admins, channels, income |
-| `/alladmins` | List all admins with expiry |
-| `/allchannels` | List all source/target channels |
-| `/addadmin` | Promote a user (asks: user ID → duration) |
+| `/stats` | View total admins, channels, and income statistics |
+| `/alladmins` | List all premium admins and their expiration dates |
+| `/allchannels` | List all active source and target channels |
+| `/addadmin` | Manually promote a user to Admin status |
 | `/removeadmin` | Demote an admin immediately |
-| `/addincome` | Log a manual payment |
+| `/grant_premium` | Quick command to grant premium to a specific user ID |
 
-### Admin
-
+### Admin (Premium Features)
 | Command | Description |
 |---|---|
-| `/addsource` | Set source channel (link, username, or forward) |
-| `/addtarget` | Add a target channel |
-| `/filter` | Add a text replacement filter |
-| `/myfilters` | View and remove filters |
-| `/schedule` | Schedule a message (content → time → once/daily) |
-| `/removeschedule` | List and remove scheduled messages |
-| `/mystatus` | View subscription expiry and channel info |
+| `/authorize` | Link Telegram account (Required for Userbot) |
+| `/addsource` | Set the channel to monitor and forward messages from |
+| `/addtarget` | Add a destination channel to forward messages to |
+| `/filter` | Add text filters, link replacers, or block words |
+| `/myfilters` | View and remove active filters |
+| `/schedule` | Schedule a message to be sent to targets |
+| `/removeschedule`| View and cancel scheduled messages |
+| `/mystatus` | Check account authorization and subscription expiry |
 
-### User
-
+### General Users
 | Command | Description |
 |---|---|
-| `/start` | Register and show trial/subscription status |
-| `/plan` | Show current plan details |
-
----
-
-## Notes
-
-- **Private source channels**: The bot must be added as an admin to receive posts. Public channels work via username.
-- **Time zone**: All scheduled message times are in **UTC**.
-- **Filter order**: Filters are applied in the order they were added.
-- **One source per admin**: Each admin has exactly one source channel (replaceable). Multiple target channels are supported.
-- **Auto-demotion**: The bot checks for expired subscriptions every hour and automatically demotes admins.
+| `/start` | Welcome message and initial registration |
+| `/help` | Interactive step-by-step image tutorials |
+| `/pro` | View premium subscription plans and purchase |
+| `/plan` | View current trial or subscription status |
