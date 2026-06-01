@@ -19,7 +19,7 @@ import logging
 import asyncio
 import re
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -77,8 +77,32 @@ _CTX_SCHED_TIME = "sched_time"
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _time_re() -> re.Pattern:
-    return re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+def parse_schedule_time(time_str: str) -> str | None:
+    """Parse time string like '14:30', '12:00 PM', '12:00PM IND' into 'HH:MM' UTC."""
+    pattern = re.compile(r"^\s*(\d{1,2}):(\d{2})(?:\s*(am|pm))?(?:\s*(utc|ind|ist))?\s*$", re.IGNORECASE)
+    match = pattern.match(time_str)
+    if not match:
+        return None
+    
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    ampm = (match.group(3) or "").upper()
+    tz = (match.group(4) or "").upper()
+    
+    if ampm == "PM" and hour < 12:
+        hour += 12
+    elif ampm == "AM" and hour == 12:
+        hour = 0
+        
+    if hour > 23 or minute > 59:
+        return None
+        
+    dt = datetime(2000, 1, 1, hour, minute)
+    
+    if tz in ("IND", "IST"):
+        dt = dt - timedelta(hours=5, minutes=30)
+        
+    return dt.strftime("%H:%M")
 
 
 async def _resolve_channel(bot, identifier: str) -> tuple[int | None, str | None]:
@@ -823,8 +847,12 @@ async def sched_content_receive(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data[_CTX_SCHED_CONTENT] = content
     await update.message.reply_text(
         "✅ Content saved!\n\n"
-        "Step 2/3 — Send the *time* to post (UTC, 24h format).\n"
-        "Example: `14:30`",
+        "Step 2/3 — Send the *time* to post.\n"
+        "Examples:\n"
+        "• `14:30` (UTC)\n"
+        "• `12:00 PM` (UTC)\n"
+        "• `12:00 PM IND` (Indian Time)\n"
+        "• `14:30 IST`",
         parse_mode="Markdown",
     )
     return SCHED_TIME_WAIT
@@ -832,14 +860,15 @@ async def sched_content_receive(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def sched_time_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     time_str = (update.message.text or "").strip()
-    if not _time_re().match(time_str):
+    parsed_utc = parse_schedule_time(time_str)
+    if not parsed_utc:
         await update.message.reply_text(
-            "❌ Invalid format. Use HH:MM (24h UTC), e.g. `14:30`\nTry again.",
+            "❌ Invalid format. Use HH:MM or HH:MM PM [IND], e.g. `14:30` or `12:00 PM IND`\nTry again.",
             parse_mode="Markdown",
         )
         return SCHED_TIME_WAIT
 
-    context.user_data[_CTX_SCHED_TIME] = time_str
+    context.user_data[_CTX_SCHED_TIME] = parsed_utc
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🔂 Daily", callback_data="schedfreq:daily"),
@@ -847,7 +876,7 @@ async def sched_time_receive(update: Update, context: ContextTypes.DEFAULT_TYPE)
         ]
     ])
     await update.message.reply_text(
-        f"✅ Time set: *{time_str} UTC*\n\nStep 3/3 — How often?",
+        f"✅ Time set: *{parsed_utc} UTC*\n\nStep 3/3 — How often?",
         parse_mode="Markdown",
         reply_markup=keyboard,
     )
