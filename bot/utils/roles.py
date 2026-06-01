@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 
 from bot.config import SUPER_ADMIN_ID
 from bot.db import users as users_db
@@ -90,7 +90,7 @@ def require_superadmin(func: Callable) -> Callable:
                 await update.message.reply_text("⛔ This command is restricted to the Super Admin.")
             elif update.callback_query:
                 await update.callback_query.answer("⛔ Super Admin only.", show_alert=True)
-            return
+            return ConversationHandler.END
         return await func(update, context, *args, **kwargs)
 
     return wrapper
@@ -115,7 +115,7 @@ def require_admin(func: Callable) -> Callable:
         if user is None:
             if update.message:
                 await update.message.reply_text("❌ You are not registered. Send /start first.")
-            return
+            return ConversationHandler.END
 
         if not is_admin_active(user):
             sa_uname = "superadmin"
@@ -135,7 +135,7 @@ def require_admin(func: Callable) -> Callable:
                 await update.message.reply_text(msg, parse_mode="Markdown")
             elif update.callback_query:
                 await update.callback_query.answer("Upgrade to Premium required.", show_alert=True)
-            return
+            return ConversationHandler.END
 
         return await func(update, context, *args, **kwargs)
 

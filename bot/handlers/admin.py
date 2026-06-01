@@ -248,13 +248,10 @@ async def auth_code_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         userbot_manager.save_session_string(admin_id, session_string)
         userbot_manager.clear_pending_auth(admin_id)
         await update.message.reply_text(
-            "🎉 *Authorization Successful!*\n\n"
-            "Your Telegram account is now linked. The bot will now monitor your source channel in real-time.\n\n"
-            "Next steps:\n"
-            "📡 /addsource — Set a source channel\n"
-            "🎯 /addtarget — Add target channels\n"
-            "🔧 /filter — Set text filters",
-            parse_mode="Markdown",
+            "✅ *Authorization Successful!*\n\n"
+            "Your Telegram account is now linked.\n\n"
+            "👉 Please click /start to see all features and commands!",
+            parse_mode="Markdown"
         )
         await userbot_manager.start_userbot(admin_id, context.bot)
         return ConversationHandler.END
