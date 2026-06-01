@@ -30,11 +30,11 @@ ARROW = '<tg-emoji emoji-id="5215720576735255650">➡️</tg-emoji>'
 
 def get_help_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Link Account", callback_data="help_cmd:/howtoauth")],
-        [InlineKeyboardButton("Set Forwarding", callback_data="help_cmd:/howtoaddforwarding")],
-        [InlineKeyboardButton("Set Filters", callback_data="help_cmd:/howtosetfilter")],
-        [InlineKeyboardButton("Schedule Messages", callback_data="help_cmd:/howtoschedule")],
-        [InlineKeyboardButton("Premium Info", callback_data="help_cmd:/howtopro")],
+        [InlineKeyboardButton("Link Account", callback_data="help_cmd:/howtoauth", icon_custom_emoji_id="5215720576735255650", style="primary")],
+        [InlineKeyboardButton("Set Forwarding", callback_data="help_cmd:/howtoaddforwarding", icon_custom_emoji_id="5215720576735255650", style="primary")],
+        [InlineKeyboardButton("Set Filters", callback_data="help_cmd:/howtosetfilter", icon_custom_emoji_id="5215720576735255650", style="primary")],
+        [InlineKeyboardButton("Schedule Messages", callback_data="help_cmd:/howtoschedule", icon_custom_emoji_id="5215720576735255650", style="primary")],
+        [InlineKeyboardButton("Premium Info", callback_data="help_cmd:/howtopro", icon_custom_emoji_id="5796205953913196373", style="success")],
     ])
 
 async def _send_help_screen(update: Update, image_name: str, text: str) -> None:
