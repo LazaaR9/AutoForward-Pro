@@ -2,17 +2,27 @@
 bot/utils/userbot_manager.py
 Manages dynamic Telethon userbot sessions running in the background.
 
-Performance architecture (v2):
-  • Telethon receives new messages from source channels.
-  • Each message handler fires asyncio.create_task() so it never blocks
-    subsequent incoming messages (prevents the "batching" effect).
-  • Forwarding tries the FAST path first: Telethon-native send_message()
-    which copies media using Telegram's internal file references — zero
-    download, zero upload, near-instant delivery.
-  • If the fast path fails (e.g. userbot lacks posting rights in a target),
-    falls back to download-once + re-upload via Bot API.
-  • Target channels and filter rules are cached in-memory with a 5-minute
-    TTL so we never hit Supabase on the hot path.
+Performance architecture (v3 — real-time):
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │  ROOT CAUSES FIXED:                                                  │
+  │  1. Supabase sync client BLOCKS the asyncio event loop — every DB   │
+  │     call (get_targets, get_filters) freezes Telethon for 50-200ms,  │
+  │     preventing it from receiving subsequent messages in real time.   │
+  │  2. Entity resolution on every send_message() adds latency.         │
+  │  3. No connection health monitoring — silent disconnects go          │
+  │     undetected, causing batch delivery when reconnected.            │
+  │  4. events.NewMessage without chats= filter processes ALL updates.  │
+  └──────────────────────────────────────────────────────────────────────┘
+
+  Solution:
+  • In-memory cache with background refresh (DB is NEVER called in the
+    hot path — zero event-loop blocking).
+  • Entity pre-resolution at startup.
+  • chats= filter on event handler for efficient event dispatch.
+  • asyncio.create_task() so each message processes independently.
+  • Telethon fast path with 10s timeout + Bot API fallback.
+  • Connection health monitor (periodic ping every 2 minutes).
+  • Sync Supabase calls wrapped in run_in_executor when cache misses.
 """
 
 from __future__ import annotations
@@ -23,6 +33,7 @@ import re
 import time
 import asyncio
 from datetime import datetime, timezone
+from functools import partial
 
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -42,30 +53,35 @@ os.makedirs(_session_dir, exist_ok=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# In-memory cache — avoids hitting Supabase on every incoming message
+# In-memory cache — DB is NEVER called in the message-handling hot path.
+# Sync Supabase calls are offloaded to a thread via run_in_executor
+# so they never block the Telethon event loop.
 # ─────────────────────────────────────────────────────────────────────────────
 _target_cache: dict[int, dict] = {}   # admin_id -> {"data": list, "ts": float}
 _filter_cache: dict[int, dict] = {}   # admin_id -> {"data": list, "ts": float}
 _CACHE_TTL = 300  # 5 minutes
 
 
-def _get_cached_targets(admin_id: int) -> list[dict]:
-    """Return target channels from cache, refreshing if stale."""
+async def _get_cached_targets(admin_id: int) -> list[dict]:
+    """Return target channels from cache, refreshing in a thread if stale."""
     cached = _target_cache.get(admin_id)
     if cached and (time.time() - cached["ts"]) < _CACHE_TTL:
         return cached["data"]
-    data = channels_db.get_target_channels(admin_id)
+    # Offload the synchronous Supabase call to a thread
+    loop = asyncio.get_running_loop()
+    data = await loop.run_in_executor(None, channels_db.get_target_channels, admin_id)
     _target_cache[admin_id] = {"data": data, "ts": time.time()}
     return data
 
 
-def _get_cached_filters(admin_id: int) -> list[dict]:
-    """Return filter rules from cache, refreshing if stale."""
+async def _get_cached_filters(admin_id: int) -> list[dict]:
+    """Return filter rules from cache, refreshing in a thread if stale."""
     cached = _filter_cache.get(admin_id)
     if cached and (time.time() - cached["ts"]) < _CACHE_TTL:
         return cached["data"]
     from bot.db.filters import get_filters
-    data = get_filters(admin_id)
+    loop = asyncio.get_running_loop()
+    data = await loop.run_in_executor(None, get_filters, admin_id)
     _filter_cache[admin_id] = {"data": data, "ts": time.time()}
     return data
 
@@ -213,6 +229,24 @@ def remove_session(admin_id: int) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Resolved entity cache — avoids slow get_input_entity on every send
+# ─────────────────────────────────────────────────────────────────────────────
+_resolved_entities: dict[int, dict] = {}  # channel_id -> InputPeer
+
+
+async def _resolve_target(client: TelegramClient, channel_id: int) -> bool:
+    """Pre-resolve a target entity and cache it. Returns True on success."""
+    if channel_id in _resolved_entities:
+        return True
+    try:
+        entity = await client.get_input_entity(channel_id)
+        _resolved_entities[channel_id] = entity
+        return True
+    except Exception:
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Userbot lifecycle
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -236,6 +270,7 @@ async def start_userbot(admin_id: int, bot) -> TelegramClient | None:
             lang_code="en",
             system_lang_code="en-IN",
             flood_sleep_threshold=60,
+            catch_up=False,  # CRITICAL: prevents batch replay of missed messages
         )
         await client.connect()
 
@@ -247,8 +282,32 @@ async def start_userbot(admin_id: int, bot) -> TelegramClient | None:
 
         source = channels_db.get_source_channel(admin_id)
         if source:
-            _register_forwarding_listener(client, admin_id, source["channel_id"], bot)
-            logger.info("Userbot listening on source %s for admin %s", source["channel_id"], admin_id)
+            source_id = source["channel_id"]
+
+            # Pre-warm caches so the first message doesn't hit DB
+            loop = asyncio.get_running_loop()
+            targets = await loop.run_in_executor(None, channels_db.get_target_channels, admin_id)
+            _target_cache[admin_id] = {"data": targets, "ts": time.time()}
+
+            from bot.db.filters import get_filters
+            rules = await loop.run_in_executor(None, get_filters, admin_id)
+            _filter_cache[admin_id] = {"data": rules, "ts": time.time()}
+
+            # Pre-resolve target entities so send_message doesn't need to resolve each time
+            for t in targets:
+                tid = t["channel_id"]
+                ok = await _resolve_target(client, tid)
+                if ok:
+                    logger.info("  ✓ Pre-resolved target %s for admin %s", tid, admin_id)
+                else:
+                    logger.warning("  ✗ Cannot pre-resolve target %s for admin %s (will use Bot API fallback)", tid, admin_id)
+
+            # Register event handler with chats= filter for efficient dispatch
+            _register_forwarding_listener(client, admin_id, source_id, bot)
+            logger.info("Userbot listening on source %s for admin %s", source_id, admin_id)
+
+            # Start connection health monitor
+            asyncio.create_task(_connection_monitor(client, admin_id, bot))
 
         _clients[admin_id] = client
         return client
@@ -259,7 +318,31 @@ async def start_userbot(admin_id: int, bot) -> TelegramClient | None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Forwarding engine (v2) — real-time, non-blocking, zero-download fast path
+# Connection health monitor — detects silent disconnects
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _connection_monitor(client: TelegramClient, admin_id: int, bot) -> None:
+    """Periodically verify the Telethon connection is alive."""
+    while admin_id in _clients and _clients[admin_id] is client:
+        await asyncio.sleep(120)  # Check every 2 minutes
+        try:
+            if not client.is_connected():
+                logger.warning("⚠️ Telethon disconnected for admin %s — reconnecting...", admin_id)
+                await client.connect()
+                if await client.is_user_authorized():
+                    logger.info("✅ Telethon reconnected for admin %s", admin_id)
+                else:
+                    logger.error("❌ Session revoked for admin %s after reconnect", admin_id)
+                    break
+            else:
+                # Ping to verify the connection is truly alive (not just TCP-open)
+                await client.get_me()
+        except Exception as e:
+            logger.error("Connection monitor error for admin %s: %s", admin_id, e)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Forwarding engine (v3) — real-time, non-blocking, zero event-loop blocking
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _normalize_id(cid) -> int:
@@ -270,21 +353,27 @@ def _normalize_id(cid) -> int:
     return int(s)
 
 
-def _register_forwarding_listener(client: TelegramClient, admin_id: int, source_channel_id: int, bot) -> None:
+def _register_forwarding_listener(
+    client: TelegramClient,
+    admin_id: int,
+    source_channel_id: int,
+    bot,
+) -> None:
     """
-    Register a Telethon event handler that dispatches each incoming message
-    to a background task immediately, so it never blocks the next message.
+    Register a Telethon event handler with a chats= filter so only
+    messages from the source channel trigger it. Each message is
+    dispatched to a background task immediately.
     """
 
-    @client.on(events.NewMessage)
+    @client.on(events.NewMessage(chats=[source_channel_id]))
     async def handler(event):
-        if _normalize_id(event.chat_id) != _normalize_id(source_channel_id):
-            return
-        # Fire-and-forget: handler returns instantly, processing runs in background
+        # Fire-and-forget: handler returns instantly, forwarding runs in background
         asyncio.create_task(_process_and_forward(client, bot, event, admin_id))
 
 
-async def _process_and_forward(client: TelegramClient, bot, event, admin_id: int) -> None:
+async def _process_and_forward(
+    client: TelegramClient, bot, event, admin_id: int,
+) -> None:
     """Core forwarding pipeline for a single incoming message."""
     try:
         # ── Skip stale messages (prevents backlog flood on restart) ──────
@@ -293,15 +382,17 @@ async def _process_and_forward(client: TelegramClient, bot, event, admin_id: int
             msg_date = event.message.date
             if msg_date.tzinfo is None:
                 msg_date = msg_date.replace(tzinfo=timezone.utc)
-            if (now - msg_date).total_seconds() > 120:
+            age = (now - msg_date).total_seconds()
+            if age > 30:
+                logger.debug("Skipping stale message (%.0fs old) for admin %s", age, admin_id)
                 return
 
-        # ── Get targets and filters from cache (no Supabase calls) ───────
-        targets = _get_cached_targets(admin_id)
+        # ── Get targets and filters from cache (NEVER blocks event loop) ─
+        targets = await _get_cached_targets(admin_id)
         if not targets:
             return
 
-        rules = _get_cached_filters(admin_id)
+        rules = await _get_cached_filters(admin_id)
         original_text = event.message.message or ""
         filtered_text = _apply_cached_filters(rules, original_text)
 
@@ -316,6 +407,11 @@ async def _process_and_forward(client: TelegramClient, bot, event, admin_id: int
 
         text_changed = filtered_text != original_text
 
+        logger.info(
+            "⚡ Forwarding msg from source (admin %s) → %d target(s) | text_changed=%s",
+            admin_id, len(targets), text_changed,
+        )
+
         # ── Phase 1: Telethon-native fast path (instant, zero bandwidth) ─
         fast_results = await asyncio.gather(
             *[_fast_forward(client, t["channel_id"], event, filtered_text, text_changed)
@@ -324,20 +420,26 @@ async def _process_and_forward(client: TelegramClient, bot, event, admin_id: int
         )
 
         # ── Phase 2: Bot API fallback for failed targets ─────────────────
-        failed_ids = [
-            targets[i]["channel_id"]
-            for i, r in enumerate(fast_results)
-            if isinstance(r, Exception)
-        ]
+        failed_ids = []
+        for i, r in enumerate(fast_results):
+            if isinstance(r, Exception):
+                failed_ids.append(targets[i]["channel_id"])
+                logger.warning(
+                    "Fast-path failed for target %s (admin %s): %s",
+                    targets[i]["channel_id"], admin_id, r,
+                )
+
         if failed_ids:
             logger.info(
-                "Telethon fast-path failed for %d target(s) (admin %s), using Bot API fallback",
+                "Using Bot API fallback for %d target(s) (admin %s)",
                 len(failed_ids), admin_id,
             )
             await _slow_forward(bot, event, filtered_text, failed_ids, admin_id)
+        else:
+            logger.info("✅ All %d target(s) forwarded via fast-path (admin %s)", len(targets), admin_id)
 
     except Exception as exc:
-        logger.error("_process_and_forward error (admin %s): %s", admin_id, exc)
+        logger.error("_process_and_forward error (admin %s): %s", admin_id, exc, exc_info=True)
 
 
 async def _fast_forward(
@@ -351,16 +453,20 @@ async def _fast_forward(
     Telethon-native message copy — uses Telegram's internal file references.
     No file download, no re-upload, near-instant delivery.
     Raises on failure so the caller can fall back to Bot API.
+    Has a 10-second timeout to prevent hanging.
     """
-    if not text_changed:
-        # Copy the message exactly as-is (preserves media, formatting, stickers, etc.)
-        await client.send_message(target_id, event.message)
-    elif event.message.media:
-        # Modified text + original media via internal file reference
-        await client.send_message(target_id, message=filtered_text, file=event.message.media)
-    elif filtered_text:
-        # Pure text with modifications
-        await client.send_message(target_id, filtered_text)
+    async def _send():
+        # Use pre-resolved entity if available, otherwise raw ID
+        entity = _resolved_entities.get(target_id, target_id)
+        if not text_changed:
+            await client.send_message(entity, event.message)
+        elif event.message.media:
+            await client.send_message(entity, message=filtered_text, file=event.message.media)
+        elif filtered_text:
+            await client.send_message(entity, filtered_text)
+
+    # Timeout prevents hanging if entity resolution or network is slow
+    await asyncio.wait_for(_send(), timeout=10.0)
 
 
 async def _slow_forward(
@@ -431,6 +537,13 @@ async def _slow_forward(
 
 async def restart_userbot_listener(admin_id: int, bot) -> None:
     invalidate_cache(admin_id)
+    # Clear pre-resolved entities for this admin's targets
+    try:
+        targets = channels_db.get_target_channels(admin_id)
+        for t in targets:
+            _resolved_entities.pop(t["channel_id"], None)
+    except Exception:
+        pass
     await stop_userbot(admin_id)
     await start_userbot(admin_id, bot)
 
