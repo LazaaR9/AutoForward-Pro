@@ -47,6 +47,7 @@ from bot.db import users as users_db
 from bot.utils.roles import require_admin
 from bot.utils.scheduler import remove_scheduled_job, schedule_message
 from bot.utils import userbot_manager
+from bot.utils.userbot_manager import invalidate_cache
 
 logger = logging.getLogger(__name__)
 
@@ -519,6 +520,7 @@ async def addtarget_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return ADD_TARGET_WAIT
 
     added = channels_db.add_target_channel(admin_id, channel_id, username)
+    invalidate_cache(admin_id)
     display = f"@{username}" if username else str(channel_id)
 
     if not added:
@@ -599,6 +601,7 @@ async def removetarget_callback(update: Update, context: ContextTypes.DEFAULT_TY
     channel_id = int(query.data.split(":", 1)[1])
 
     deleted = channels_db.remove_target_channel(admin_id, channel_id)
+    invalidate_cache(admin_id)
     if deleted:
         targets = channels_db.get_target_channels(admin_id)
         await query.edit_message_text(
@@ -677,6 +680,7 @@ async def filter_type_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         
     elif ftype == "block_apk":
         filters_db.add_filter(update.effective_user.id, "<BLOCK_APK>", "true")
+        invalidate_cache(update.effective_user.id)
         await query.edit_message_text(
             "✅ *Filter saved!*\n\n"
             "APK files (`.apk`) will now be blocked and not forwarded.\n"
@@ -721,6 +725,7 @@ async def filter_replace_receive(update: Update, context: ContextTypes.DEFAULT_T
         return ConversationHandler.END
 
     filters_db.add_filter(admin_id, find_text, replace_text.strip())
+    invalidate_cache(admin_id)
 
     label = f"`{replace_text.strip()}`" if replace_text.strip() else "_(deleted)_"
     display_find = "Any Link" if find_text == "<ALL_LINKS>" else "Any Username" if find_text == "<ALL_USERNAMES>" else "Block Keyword" if find_text == "<BLOCK>" else f"`{find_text}`"
@@ -772,7 +777,9 @@ async def myfilters_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     filter_id = query.data.split(":", 1)[1]
+    admin_id = query.from_user.id
     deleted = filters_db.remove_filter(filter_id)
+    invalidate_cache(admin_id)
     if deleted:
         await query.edit_message_text("✅ Filter removed.")
     else:
