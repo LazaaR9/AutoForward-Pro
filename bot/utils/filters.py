@@ -40,7 +40,12 @@ def apply_filters(admin_id: int, text: str | None) -> str | None:
     # Process standard exact match rules
     for rule in rules:
         find = rule["find_text"]
-        if find not in ("<ALL_LINKS>", "<ALL_USERNAMES>", "<BLOCK>"):
+        if find not in ("<ALL_LINKS>", "<ALL_USERNAMES>", "<BLOCK>", "<BLOCK_APK>"):
             text = text.replace(find, rule["replace_text"])
 
     return text
+
+def should_block_apk(admin_id: int) -> bool:
+    """Check if the admin has enabled the APK block filter."""
+    rules = get_filters(admin_id)
+    return any(r["find_text"] == "<BLOCK_APK>" for r in rules)

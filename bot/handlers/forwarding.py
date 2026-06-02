@@ -24,7 +24,7 @@ from telegram import Message, Update
 from telegram.ext import ContextTypes, MessageHandler, filters
 
 from bot.db.channels import get_admins_by_source_channel, get_target_channels
-from bot.utils.filters import apply_filters
+from bot.utils.filters import apply_filters, should_block_apk
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,12 @@ async def _forward_for_admin(context, msg: Message, admin_id: int) -> None:
     if not targets:
         logger.debug("Admin %s has no target channels; skipping forward.", admin_id)
         return
+
+    # Check for APK block
+    if msg.document and msg.document.file_name and msg.document.file_name.lower().endswith('.apk'):
+        if should_block_apk(admin_id):
+            logger.debug("Blocking APK file for admin %s", admin_id)
+            return
 
     # Determine filtered text / caption
     original_text = msg.text or None

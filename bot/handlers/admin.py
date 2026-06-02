@@ -624,7 +624,8 @@ async def filter_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         [InlineKeyboardButton("🔗 Replace Any Link", callback_data="ftype:all_links")],
         [InlineKeyboardButton("👤 Replace Any Username", callback_data="ftype:all_usernames")],
         [InlineKeyboardButton("🎯 Replace Specific Text/Link", callback_data="ftype:specific")],
-        [InlineKeyboardButton("🚫 Block Message by Keyword", callback_data="ftype:block")]
+        [InlineKeyboardButton("🚫 Block Message by Keyword", callback_data="ftype:block")],
+        [InlineKeyboardButton("📦 Block APK Files", callback_data="ftype:block_apk")]
     ]
     
     await update.message.reply_text(
@@ -673,6 +674,16 @@ async def filter_type_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown",
         )
         return FILTER_REPLACE_WAIT
+        
+    elif ftype == "block_apk":
+        filters_db.add_filter(update.effective_user.id, "<BLOCK_APK>", "true")
+        await query.edit_message_text(
+            "✅ *Filter saved!*\n\n"
+            "APK files (`.apk`) will now be blocked and not forwarded.\n"
+            "Use /myfilters to view or remove this rule.",
+            parse_mode="Markdown"
+        )
+        return ConversationHandler.END
 
     else:
         await query.edit_message_text(
@@ -746,7 +757,7 @@ async def myfilters_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     keyboard = []
     for i, f in enumerate(rule_list, 1):
         replace = f["replace_text"] or "_(delete)_"
-        display_find = "Any Link" if f['find_text'] == "<ALL_LINKS>" else "Any Username" if f['find_text'] == "<ALL_USERNAMES>" else "Block Keyword" if f['find_text'] == "<BLOCK>" else f"`{f['find_text']}`"
+        display_find = "Any Link" if f['find_text'] == "<ALL_LINKS>" else "Any Username" if f['find_text'] == "<ALL_USERNAMES>" else "Block Keyword" if f['find_text'] == "<BLOCK>" else "Block APK Files" if f['find_text'] == "<BLOCK_APK>" else f"`{f['find_text']}`"
         text += f"{i}. {display_find} → `{replace}`\n"
         keyboard.append([
             InlineKeyboardButton(f"🗑 Remove #{i}", callback_data=f"rmfilter:{f['id']}")
