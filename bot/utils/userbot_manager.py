@@ -218,7 +218,13 @@ def _register_forwarding_listener(client: TelegramClient, admin_id: int, source_
             target_id = target["channel_id"]
             try:
                 if media_path and os.path.exists(media_path):
-                    if event.message.photo:
+                    if event.message.sticker or (media_path and media_path.lower().endswith(('.webm', '.tgs', '.webp'))):
+                        try:
+                            with open(media_path, "rb") as f:
+                                await bot.send_sticker(chat_id=target_id, sticker=f)
+                        except Exception as e:
+                            logger.warning("Dropped invalid sticker (could be premium emoji): %s", e)
+                    elif event.message.photo:
                         with open(media_path, "rb") as f:
                             await bot.send_photo(chat_id=target_id, photo=f, caption=filtered_text or None)
                     elif event.message.video:
@@ -233,9 +239,6 @@ def _register_forwarding_listener(client: TelegramClient, admin_id: int, source_
                     elif event.message.video_note:
                         with open(media_path, "rb") as f:
                             await bot.send_video_note(chat_id=target_id, video_note=f)
-                    elif event.message.sticker or (media_path and media_path.lower().endswith(('.webm', '.tgs', '.webp'))):
-                        with open(media_path, "rb") as f:
-                            await bot.send_sticker(chat_id=target_id, sticker=f)
                     else:
                         with open(media_path, "rb") as f:
                             await bot.send_document(chat_id=target_id, document=f, caption=filtered_text or None)
