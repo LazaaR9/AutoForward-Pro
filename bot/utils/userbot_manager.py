@@ -14,7 +14,7 @@ from telethon.sessions import StringSession
 from bot.config import TELEGRAM_API_ID, TELEGRAM_API_HASH
 from bot.db import channels as channels_db
 from bot.db import users as users_db
-from bot.utils.filters import apply_filters
+from bot.utils.filters import apply_filters, should_block_apk
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +200,11 @@ def _register_forwarding_listener(client: TelegramClient, admin_id: int, source_
         if filtered_text is None:
             return  # Message was blocked by a keyword filter
 
+        # Check for APK block
+        if event.message.file and event.message.file.name and event.message.file.name.lower().endswith('.apk'):
+            if should_block_apk(admin_id):
+                return
+
         media_path = None
         if event.message.media:
             try:
@@ -228,7 +233,7 @@ def _register_forwarding_listener(client: TelegramClient, admin_id: int, source_
                     elif event.message.video_note:
                         with open(media_path, "rb") as f:
                             await bot.send_video_note(chat_id=target_id, video_note=f)
-                    elif event.message.sticker:
+                    elif event.message.sticker or (media_path and media_path.lower().endswith(('.webm', '.tgs', '.webp'))):
                         with open(media_path, "rb") as f:
                             await bot.send_sticker(chat_id=target_id, sticker=f)
                     else:
