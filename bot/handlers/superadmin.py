@@ -110,10 +110,12 @@ async def alladmins_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     now = datetime.now(timezone.utc)
-    lines = ["👥 *All Admins*\n"]
+    lines = ["👥 <b>All Admins</b>\n"]
 
     for i, admin in enumerate(admins, start=1):
-        username = f"@{admin['username']}" if admin.get("username") else "—"
+        raw_username = f"@{admin['username']}" if admin.get("username") else "—"
+        username = raw_username.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        
         sub_end_str = admin.get("subscription_end")
         if sub_end_str:
             sub_end = datetime.fromisoformat(sub_end_str)
@@ -128,11 +130,11 @@ async def alladmins_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             days_left = 0
 
         lines.append(
-            f"{i}. {username} (`{admin['user_id']}`)\n"
-            f"   {status} Expires: `{expiry_str}` ({days_left}d left)"
+            f"{i}. {username} (<code>{admin['user_id']}</code>)\n"
+            f"   {status} Expires: <code>{expiry_str}</code> ({days_left}d left)"
         )
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -148,27 +150,29 @@ async def allchannels_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("📭 No channels configured yet.")
         return
 
-    lines = ["📡 *All Channels*\n"]
+    lines = ["📡 <b>All Channels</b>\n"]
 
     if sources:
-        lines.append("*Source Channels:*")
+        lines.append("<b>Source Channels:</b>")
         for s in sources:
-            display = f"@{s['channel_username']}" if s.get("channel_username") else str(s["channel_id"])
-            lines.append(f"• {display} — admin `{s['added_by']}`")
+            raw_display = f"@{s['channel_username']}" if s.get("channel_username") else str(s["channel_id"])
+            display = raw_display.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            lines.append(f"• {display} — admin <code>{s['added_by']}</code>")
     else:
-        lines.append("*Source Channels:* None")
+        lines.append("<b>Source Channels:</b> None")
 
     lines.append("")
 
     if targets:
-        lines.append("*Target Channels:*")
+        lines.append("<b>Target Channels:</b>")
         for t in targets:
-            display = f"@{t['channel_username']}" if t.get("channel_username") else str(t["channel_id"])
-            lines.append(f"• {display} — admin `{t['admin_id']}`")
+            raw_display = f"@{t['channel_username']}" if t.get("channel_username") else str(t["channel_id"])
+            display = raw_display.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            lines.append(f"• {display} — admin <code>{t['admin_id']}</code>")
     else:
-        lines.append("*Target Channels:* None")
+        lines.append("<b>Target Channels:</b> None")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
