@@ -194,6 +194,16 @@ def _register_forwarding_listener(client: TelegramClient, admin_id: int, source_
         if not targets:
             return
 
+        # Prevent forwarding old messages if the bot was offline
+        if event.message.date:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            msg_date = event.message.date
+            if msg_date.tzinfo is None:
+                msg_date = msg_date.replace(tzinfo=timezone.utc)
+            if (now - msg_date).total_seconds() > 120:
+                return
+
         original_text = event.message.message or ""
         filtered_text = apply_filters(admin_id, original_text)
         

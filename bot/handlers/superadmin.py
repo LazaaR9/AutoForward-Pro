@@ -195,15 +195,7 @@ async def addadmin_userid_receive(update: Update, context: ContextTypes.DEFAULT_
         return ADDADMIN_USERID_WAIT
 
     target_id = int(text)
-    user = users_db.get_user(target_id)
-
-    if user is None:
-        await update.message.reply_text(
-            f"❌ User `{target_id}` not found in the database.\n"
-            "Make sure they have sent /start to the bot first.",
-            parse_mode="Markdown",
-        )
-        return ADDADMIN_USERID_WAIT
+    user = users_db.get_or_create_user(target_id)
 
     context.user_data[_CTX_TARGET_USER] = target_id
     username = f"@{user['username']}" if user.get("username") else f"ID {target_id}"
@@ -237,9 +229,26 @@ async def addadmin_duration_callback(update: Update, context: ContextTypes.DEFAU
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=duration_days)
 
-    # Promote
-    users_db.set_role(target_id, "admin")
-    users_db.set_subscription_end(target_id, expires_at)
+    # Determine plan label from days
+    if duration_days <= 30:
+        plan = "1_month"
+    elif duration_days <= 90:
+        plan = "3_months"
+    elif duration_days <= 180:
+        plan = "6_months"
+    else:
+        plan = "manual"
+
+    # Promote using the unified subscription setter
+    set_subscription(
+        user_id=target_id,
+        plan=plan,
+        start_dt=now,
+        end_dt=expires_at,
+        payment_method="manual",
+        amount=0.0,
+        payment_status="paid",
+    )
     log_transaction(target_id, 0.0, duration_days, now, expires_at)
 
     # Notify the promoted user
