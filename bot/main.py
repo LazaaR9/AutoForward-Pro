@@ -115,18 +115,33 @@ async def post_shutdown(application: Application) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Application factory
+# Global Error Handler
 # ─────────────────────────────────────────────────────────────────────────────
+
+async def global_error_handler(update, context) -> None:
+    """Log errors globally and prevent the bot from crashing."""
+    logger.error("Exception while handling an update:", exc_info=context.error)
+    # If it's a network timeout, we can silently ignore it as PTB will retry
+    from telegram.error import TimedOut, NetworkError
+    if isinstance(context.error, (TimedOut, NetworkError)):
+        logger.warning("Network timeout occurred, ignoring to keep bot alive.")
+
 
 def build_application() -> Application:
     # PTB v21+: post_init is passed into the builder chain, not set after build()
     app = (
         Application.builder()
         .token(BOT_TOKEN)
+        .connect_timeout(30.0)
+        .read_timeout(30.0)
+        .write_timeout(30.0)
         .post_init(post_init)
         .post_shutdown(post_shutdown)
         .build()
     )
+
+    # Register global error handler to catch timeouts
+    app.add_error_handler(global_error_handler)
 
     # Register handlers in priority order:
     # 1. Super Admin  (most restrictive — checked first by PTB)

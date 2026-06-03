@@ -83,7 +83,11 @@ async def _send_help_screen(update: Update, image_name: str, text: str) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     default_text = (
         f"<b>Help & Tutorials</b>\n\n"
-        f"Click the buttons below to see how it works {ARROW}"
+        f"<b>Quick Start Guide:</b>\n"
+        f"1. /authorize — Link your account\n"
+        f"2. /addsource — Pick channel to copy from\n"
+        f"3. /addtarget — Pick where messages go\n\n"
+        f"Click the buttons below to see detailed tutorials {ARROW}"
     )
     text = get_content("help_msg", default_text)
     await _send_help_screen(update, "welcome.png", text)

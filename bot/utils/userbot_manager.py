@@ -61,6 +61,10 @@ _target_cache: dict[int, dict] = {}   # admin_id -> {"data": list, "ts": float}
 _filter_cache: dict[int, dict] = {}   # admin_id -> {"data": list, "ts": float}
 _CACHE_TTL = 300  # 5 minutes
 
+from collections import OrderedDict
+_processed_messages: dict[int, OrderedDict] = {} # admin_id -> OrderedDict(msg_id -> bool)
+_PROCESSED_MAX_SIZE = 100
+
 
 async def _get_cached_targets(admin_id: int) -> list[dict]:
     """Return target channels from cache, refreshing in a thread if stale."""
@@ -283,6 +287,31 @@ async def start_userbot(admin_id: int, bot) -> TelegramClient | None:
         source = channels_db.get_source_channel(admin_id)
         if source:
             source_id = source["channel_id"]
+            source_username = source.get("channel_username")
+            
+            # If it's a public channel and we have the username, ensure we are joined
+            # because Telegram does not push NewMessage events to non-members of public channels!
+            if source_username:
+                try:
+                    from telethon.tl.functions.channels import JoinChannelRequest
+                    await client(JoinChannelRequest(source_username.replace("@", "")))
+                    logger.info("Auto-joined public source channel %s for admin %s", source_username, admin_id)
+                except Exception as e:
+                    logger.debug("Auto-join skipped/failed for %s: %s", source_username, e)
+
+            # Validate source channel access
+            try:
+                await client.get_input_entity(source_id)
+            except Exception:
+                logger.error("Admin %s userbot cannot access source channel %s", admin_id, source_id)
+                try:
+                    await bot.send_message(
+                        chat_id=admin_id,
+                        text="⚠️ *Userbot Access Error*\n\nYour userbot account is **not a member** of your configured source channel. It cannot forward messages until you add it to the channel.",
+                        parse_mode="Markdown"
+                    )
+                except Exception:
+                    pass
 
             # Pre-warm caches so the first message doesn't hit DB
             loop = asyncio.get_running_loop()
@@ -306,8 +335,9 @@ async def start_userbot(admin_id: int, bot) -> TelegramClient | None:
             _register_forwarding_listener(client, admin_id, source_id, bot)
             logger.info("Userbot listening on source %s for admin %s", source_id, admin_id)
 
-            # Start connection health monitor
+            # Start connection health monitor and fallback poller
             asyncio.create_task(_connection_monitor(client, admin_id, bot))
+            asyncio.create_task(_channel_poller(client, bot, admin_id, source_id))
 
         _clients[admin_id] = client
         return client
@@ -341,6 +371,42 @@ async def _connection_monitor(client: TelegramClient, admin_id: int, bot) -> Non
             logger.error("Connection monitor error for admin %s: %s", admin_id, e)
 
 
+async def _channel_poller(client: TelegramClient, bot, admin_id: int, source_channel_id: int) -> None:
+    """
+    Background fallback poller. Telegram often drops push events for large public channels.
+    This manually fetches the latest messages every 15s to catch anything the listener missed.
+    """
+    from telethon.errors import FloodWaitError
+    await asyncio.sleep(5)  # Let event loop stabilize on startup
+    while admin_id in _clients and _clients[admin_id] is client:
+        try:
+            # Fetch latest 5 messages
+            async for message in client.iter_messages(source_channel_id, limit=5):
+                # Check if already processed
+                if admin_id in _processed_messages and message.id in _processed_messages[admin_id]:
+                    continue
+                    
+                # Construct a dummy event object for _process_and_forward
+                class DummyEvent:
+                    pass
+                event = DummyEvent()
+                event.message = message
+                event.chat_id = source_channel_id
+                
+                logger.info("Poller caught missed message %s for admin %s", message.id, admin_id)
+                asyncio.create_task(_process_and_forward(client, bot, event, admin_id))
+                
+            await asyncio.sleep(15)
+        except FloodWaitError as e:
+            logger.warning("Poller flood wait for admin %s. Sleeping %s seconds", admin_id, e.seconds)
+            await asyncio.sleep(e.seconds)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.debug("Poller error for admin %s: %s", admin_id, e)
+            await asyncio.sleep(15)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Forwarding engine (v3) — real-time, non-blocking, zero event-loop blocking
 # ─────────────────────────────────────────────────────────────────────────────
@@ -367,7 +433,13 @@ def _register_forwarding_listener(
 
     @client.on(events.NewMessage())
     async def handler(event):
-        if _normalize_id(event.chat_id) != _normalize_id(source_channel_id):
+        incoming_id = _normalize_id(event.chat_id)
+        expected_id = _normalize_id(source_channel_id)
+        
+        # Log every single incoming message to debug the filter
+        logger.warning(f"Received msg from {event.chat_id} (normalized: {incoming_id}). Expected source: {source_channel_id} (normalized: {expected_id})")
+        
+        if incoming_id != expected_id:
             return
         # Fire-and-forget: handler returns instantly, forwarding runs in background
         asyncio.create_task(_process_and_forward(client, bot, event, admin_id))
@@ -378,6 +450,17 @@ async def _process_and_forward(
 ) -> None:
     """Core forwarding pipeline for a single incoming message."""
     try:
+        # ── Deduplication check (prevents double-forward from listener + poller) ──
+        msg_id = getattr(event.message, "id", None)
+        if msg_id is not None:
+            if admin_id not in _processed_messages:
+                _processed_messages[admin_id] = OrderedDict()
+            if msg_id in _processed_messages[admin_id]:
+                return
+            _processed_messages[admin_id][msg_id] = True
+            if len(_processed_messages[admin_id]) > _PROCESSED_MAX_SIZE:
+                _processed_messages[admin_id].popitem(last=False)
+
         # ── Skip stale messages (prevents backlog flood on restart) ──────
         if event.message.date:
             now = datetime.now(timezone.utc)

@@ -461,7 +461,8 @@ async def addsource_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         f"✅ *Source channel set!*\n\n"
         f"📡 Now monitoring: `{display}`\n"
         f"ID: `{channel_id}`\n\n"
-        f"The bot will forward new messages from this channel to your target channels.",
+        f"The bot will forward new messages from this channel to your target channels.\n\n"
+        f"➡️ *Next Step:* Use /addtarget to add your destination channels.",
         parse_mode="Markdown",
     )
     return ConversationHandler.END
@@ -534,7 +535,10 @@ async def addtarget_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             f"✅ *Target channel added!*\n\n"
             f"🎯 `{display}` (ID: `{channel_id}`)\n\n"
             f"Total targets: *{len(targets)}*\n\n"
-            f"Run /addtarget again to add more.",
+            f"➡️ *Next Steps:*\n"
+            f"• Run /addtarget again to add more.\n"
+            f"• Use /addfilter to set up keyword replacements.\n"
+            f"• Use /mystatus to verify your setup.",
             parse_mode="Markdown",
         )
     return ConversationHandler.END
