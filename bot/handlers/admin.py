@@ -542,7 +542,7 @@ async def addtarget_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             f"Total targets: *{len(targets)}*\n\n"
             f"➡️ *Next Steps:*\n"
             f"• Run /addtarget again to add more.\n"
-            f"• Use /addfilter to set up keyword replacements.\n"
+            f"• Use /filter to set up keyword replacements.\n"
             f"• Use /mystatus to verify your setup.",
             parse_mode="Markdown",
         )
