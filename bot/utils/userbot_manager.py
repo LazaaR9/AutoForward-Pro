@@ -230,8 +230,8 @@ def remove_session(admin_id: int) -> None:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Resolved entity cache — avoids slow get_input_entity on every send
-# ─────────────────────────────────────────────────────────────────────────────
-_resolved_entities: dict[int, dict] = {}  # channel_id -> InputPeer
+from typing import Any
+_resolved_entities: dict[int, Any] = {}  # channel_id -> InputPeer
 
 
 async def _resolve_target(client: TelegramClient, channel_id: int) -> bool:
@@ -360,13 +360,15 @@ def _register_forwarding_listener(
     bot,
 ) -> None:
     """
-    Register a Telethon event handler with a chats= filter so only
-    messages from the source channel trigger it. Each message is
-    dispatched to a background task immediately.
+    Register a Telethon event handler. We use a manual ID check because
+    Telethon's chats= filter can fail silently if the -100 prefix mismatches.
+    Each message is dispatched to a background task immediately.
     """
 
-    @client.on(events.NewMessage(chats=[source_channel_id]))
+    @client.on(events.NewMessage())
     async def handler(event):
+        if _normalize_id(event.chat_id) != _normalize_id(source_channel_id):
+            return
         # Fire-and-forget: handler returns instantly, forwarding runs in background
         asyncio.create_task(_process_and_forward(client, bot, event, admin_id))
 
@@ -384,7 +386,7 @@ async def _process_and_forward(
                 msg_date = msg_date.replace(tzinfo=timezone.utc)
             age = (now - msg_date).total_seconds()
             if age > 30:
-                logger.debug("Skipping stale message (%.0fs old) for admin %s", age, admin_id)
+                logger.warning("Skipping stale message (%.0fs old) for admin %s", age, admin_id)
                 return
 
         # ── Get targets and filters from cache (NEVER blocks event loop) ─
