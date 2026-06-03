@@ -175,7 +175,8 @@ async def authorize_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "To monitor private and public channels, I need to link your personal Telegram account.\n\n"
         "📱 *Step 1 of 2:* Send your phone number in international format:\n"
         "`+91xxxxxxxxxx` or `+1xxxxxxxxxx`\n\n"
-        "Type /cancel to abort.",
+        "Type /cancel to abort.\n\n"
+        "💡 *Need a tutorial?* Send /help",
         parse_mode="Markdown",
     )
     return AUTH_PHONE_WAIT
@@ -214,7 +215,8 @@ async def auth_phone_receive(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "Enter the code Telegram sent to your app or SMS.\n\n"
             "🚨 *CRITICAL:* Do NOT send the code as plain digits! Telegram will detect it as a phishing attempt and expire the code immediately.\n\n"
             "✅ Send it with hyphens between each number, e.g., `1-2-3-4-5`.\n\n"
-            "Type /cancel to abort.",
+            "Type /cancel to abort.\n\n"
+        "💡 *Need a tutorial?* Send /help",
             parse_mode="Markdown",
         )
         return AUTH_CODE_WAIT
@@ -306,7 +308,8 @@ async def auth_code_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "🔒 *Two-Step Verification Required*\n\n"
             "Your account has a 2FA password enabled.\n"
             "Please send your *2FA password* now:\n\n"
-            "Type /cancel to abort.",
+            "Type /cancel to abort.\n\n"
+        "💡 *Need a tutorial?* Send /help",
             parse_mode="Markdown",
         )
         return AUTH_2FA_WAIT
@@ -406,7 +409,8 @@ async def addsource_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "✅ Works for both *public* and *private* channels "
         "(your linked account must be a member of private ones)."
         f"{existing_note}\n\n"
-        "Type /cancel to abort.",
+        "Type /cancel to abort.\n\n"
+        "💡 *Need a tutorial?* Send /help",
         parse_mode="Markdown",
     )
     return ADD_SOURCE_WAIT
@@ -491,7 +495,8 @@ async def addtarget_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "⚠️ The bot must be an *admin* of the target channel to post messages."
         f"{count_note}\n\n"
         "You can add multiple targets — just run /addtarget again.\n\n"
-        "Type /cancel to abort.",
+        "Type /cancel to abort.\n\n"
+        "💡 *Need a tutorial?* Send /help",
         parse_mode="Markdown",
     )
     return ADD_TARGET_WAIT
@@ -655,7 +660,8 @@ async def filter_type_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "🔗 *Replace Any Link*\n\n"
             "Send the *default link* you want to replace ALL links with.\n"
             "_(Send a single space or leave blank to delete occurrences.)_\n\n"
-            "Type /cancel to abort.",
+            "Type /cancel to abort.\n\n"
+        "💡 *Need a tutorial?* Send /help",
             parse_mode="Markdown",
         )
         return FILTER_REPLACE_WAIT
@@ -666,7 +672,8 @@ async def filter_type_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "👤 *Replace Any Username*\n\n"
             "Send the *default username* you want to replace ALL usernames with.\n"
             "_(Send a single space or leave blank to delete occurrences.)_\n\n"
-            "Type /cancel to abort.",
+            "Type /cancel to abort.\n\n"
+        "💡 *Need a tutorial?* Send /help",
             parse_mode="Markdown",
         )
         return FILTER_REPLACE_WAIT
@@ -677,7 +684,8 @@ async def filter_type_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "🚫 *Block Message by Keyword*\n\n"
             "Send the *keyword*. If a message contains this keyword, it will NOT be forwarded.\n"
             "_(Case-insensitive match)_ \n\n"
-            "Type /cancel to abort.",
+            "Type /cancel to abort.\n\n"
+        "💡 *Need a tutorial?* Send /help",
             parse_mode="Markdown",
         )
         return FILTER_REPLACE_WAIT
@@ -697,7 +705,8 @@ async def filter_type_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text(
             "🎯 *Replace Specific Text/Link/Username*\n\n"
             "📝 *Step 1:* Send the exact text/link/username you want to *find*.\n\n"
-            "Type /cancel to abort.",
+            "Type /cancel to abort.\n\n"
+        "💡 *Need a tutorial?* Send /help",
             parse_mode="Markdown",
         )
         return FILTER_FIND_WAIT
