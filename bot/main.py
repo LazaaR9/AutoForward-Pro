@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from telegram.ext import Application
 
 from bot.config import BOT_TOKEN
-from bot.handlers import admin, forwarding, superadmin, user, payment, help
+from bot.handlers import admin, forwarding, superadmin, user, payment, help, referral
 from bot.utils import userbot_manager
 from bot.utils.scheduler import (
     bootstrap_schedules,
@@ -158,6 +158,7 @@ def build_application() -> Application:
 
     # 4.5. Help handlers
     help.register(app)
+    referral.register(app)
 
     # 5. Forwarding (group=1 — lower priority, channel posts only)
     forwarding.register(app)

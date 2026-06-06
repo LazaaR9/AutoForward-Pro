@@ -15,6 +15,7 @@ from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
 from bot.config import SUPER_ADMIN_ID, TRIAL_DAYS
 from bot.db import users as users_db
 from bot.db.content import get_content
+from bot.db import referrals as ref_db
 from bot.utils import userbot_manager
 
 logger = logging.getLogger(__name__)
@@ -28,10 +29,23 @@ IMAGES_DIR = BASE_DIR / "images"
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Register user, start trial, show status."""
+    """Register user, handle referral deep link, show status."""
     tg_user = update.effective_user
     user = users_db.get_or_create_user(tg_user.id, tg_user.username)
     role = user["role"]
+
+    # ── Handle referral deep link: /start ref_<referrer_id> ──────────────
+    if context.args:
+        payload = context.args[0]
+        if payload.startswith("ref_"):
+            try:
+                referrer_id = int(payload[4:])
+                # Only record if this is a new user (no existing referral) and not self-referral
+                if referrer_id != tg_user.id and not user.get("referred_by"):
+                    ref_db.record_referral(referrer_id, tg_user.id)
+                    users_db.save_referred_by(tg_user.id, referrer_id)
+            except (ValueError, Exception) as e:
+                logger.debug("Referral parse error: %s", e)
 
     if role == "superadmin":
         await update.message.reply_text(
@@ -86,7 +100,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"/myfilters — View/remove filters\n"
             f"/schedule — Schedule a message\n"
             f"/removeschedule — Remove a schedule\n"
-            f"/mystatus — View subscription",
+            f"/mystatus — View subscription\n"
+            f"/refer — Refer & Earn 💰",
             parse_mode="Markdown",
         )
         return
@@ -106,7 +121,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"/schedule — Schedule automated messages\n"
         f"/removeschedule — Remove a schedule\n"
         f"/mystatus — View your status\n"
-        f"/plan — Check plan status\n\n"
+        f"/plan — Check plan status\n"
+        f"/refer — Refer & Earn 💰\n\n"
         f"<b>Paid Plan Needed:</b>\n"
         f"To activate real-time channel forwarding, please use /pro to purchase a plan and activate your account!"
     )

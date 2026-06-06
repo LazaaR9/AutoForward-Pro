@@ -43,6 +43,7 @@ from bot.db.users import (
     revoke_subscription,
 )
 from bot.db.content import set_content
+from bot.db import referrals as ref_db
 from bot.utils.roles import require_superadmin
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,9 @@ logger = logging.getLogger(__name__)
     ADDINCOME_AMOUNT_WAIT,
     UPDATE_TEXT_WAIT,
     BROADCAST_WAIT,
-) = range(7)
+    EDITREFERRAL_USERID_WAIT,
+    EDITREFERRAL_AMOUNT_WAIT,
+) = range(9)
 
 # Context keys
 _CTX_TARGET_USER = "target_user_id"
@@ -801,6 +804,93 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# /referralstats — super admin view of top referrers
+# ─────────────────────────────────────────────────────────────────────────────
+
+@require_superadmin
+async def referralstats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show top referrers leaderboard."""
+    top = ref_db.get_top_referrers(limit=10)
+    payout = ref_db.get_referral_payout_amount()
+
+    if not top:
+        await update.message.reply_text("📭 No referral conversions yet.")
+        return
+
+    lines = [f"🏆 *Top Referrers* (₹{payout:.0f}/conversion)\n"]
+    for i, row in enumerate(top, 1):
+        uid = row["referrer_id"]
+        pro = row["pro_count"]
+        earned = row["total_earned"]
+        lines.append(f"{i}. `{uid}` — {pro} conversions — ₹{earned:.2f} earned")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /editreferral — super admin: adjust a user's referral balance
+# ─────────────────────────────────────────────────────────────────────────────
+
+@require_superadmin
+async def editreferral_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        "✏️ *Edit Referral Balance*\n\n"
+        "Send the *User ID* of the referrer you want to edit.\n\n"
+        "Type /cancel to abort.",
+        parse_mode="Markdown",
+    )
+    return EDITREFERRAL_USERID_WAIT
+
+
+async def editreferral_userid_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.strip()
+    try:
+        user_id = int(text)
+    except ValueError:
+        await update.message.reply_text("❌ Invalid User ID. Send a numeric Telegram user ID.")
+        return EDITREFERRAL_USERID_WAIT
+
+    stats = ref_db.get_referral_stats(user_id)
+    context.user_data["ref_edit_uid"] = user_id
+
+    await update.message.reply_text(
+        f"📊 Current stats for `{user_id}`:\n"
+        f"• Total referrals: *{stats['total_referrals']}*\n"
+        f"• Pro conversions: *{stats['pro_referrals']}*\n"
+        f"• Total earned: *₹{stats['total_earned']:.2f}*\n\n"
+        f"Send the *new total earned amount* (₹) to set.\n"
+        f"_(e.g. send `0` to reset after payout, or `44` to set to ₹44)_\n\n"
+        f"Type /cancel to abort.",
+        parse_mode="Markdown",
+    )
+    return EDITREFERRAL_AMOUNT_WAIT
+
+
+async def editreferral_amount_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.strip()
+    try:
+        new_amount = float(text)
+        if new_amount < 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("❌ Invalid amount. Send a positive number like `44` or `0`.")
+        return EDITREFERRAL_AMOUNT_WAIT
+
+    user_id = context.user_data.get("ref_edit_uid")
+    success = ref_db.adjust_user_earnings(user_id, new_amount)
+
+    if success:
+        await update.message.reply_text(
+            f"✅ Referral balance for `{user_id}` updated to *₹{new_amount:.2f}*.",
+            parse_mode="Markdown",
+        )
+    else:
+        await update.message.reply_text("❌ Failed to update balance. Check logs.")
+
+    return ConversationHandler.END
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Handler registration
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -890,4 +980,22 @@ def register(application) -> None:
         },
         fallbacks=[cancel_handler],
         name="broadcast",
+    ))
+
+    # /referralstats standalone
+    application.add_handler(CommandHandler("referralstats", referralstats_command))
+
+    # /editreferral conversation
+    application.add_handler(ConversationHandler(
+        entry_points=[CommandHandler("editreferral", editreferral_start)],
+        states={
+            EDITREFERRAL_USERID_WAIT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, editreferral_userid_receive),
+            ],
+            EDITREFERRAL_AMOUNT_WAIT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, editreferral_amount_receive),
+            ],
+        },
+        fallbacks=[cancel_handler],
+        name="editreferral",
     ))

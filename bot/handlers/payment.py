@@ -20,6 +20,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
 from bot.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, SUPER_ADMIN_ID
 from bot.db import subscriptions as subs_db
 from bot.db import users as users_db
+from bot.db import referrals as ref_db
 from bot.db.transactions import log_transaction
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,12 @@ def _activate_user(user_id: int, plan_key: str, amount: float, method: str) -> d
         payment_status="paid",
     )
     log_transaction(user_id, amount, plan["days"], now, expires_at)
+
+    # Credit referral earnings if this user was referred by someone
+    earned = ref_db.credit_referral(user_id)
+    if earned:
+        logger.info("Referral credit: user %s converted to Pro, referrer earned ₹%.2f", user_id, earned)
+
     return expires_at
 
 
