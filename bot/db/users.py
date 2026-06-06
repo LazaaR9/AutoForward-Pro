@@ -115,6 +115,13 @@ def get_all_users_count() -> int:
     res = db.table("users").select("user_id", count="exact").execute()
     return res.count or 0
 
+def get_all_users() -> list[dict]:
+    """Return all users (user_id only) for broadcasting."""
+    db = get_client()
+    res = db.table("users").select("user_id").execute()
+    return res.data or []
+
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Subscription management (payment system)

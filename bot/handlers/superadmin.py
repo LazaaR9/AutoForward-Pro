@@ -7,6 +7,7 @@ Super Admin only ConversationHandlers and commands:
   /addadmin      — Promote user to admin
   /removeadmin   — Demote admin immediately
   /addincome     — Log a manual payment
+  /broadcast     — Broadcast message to all users
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ from bot.db import users as users_db
 from bot.db.transactions import log_transaction
 from bot.db.users import (
     get_active_subscriptions,
+    get_all_users,
     get_expiring_soon_admins,
     get_expired_admins,
     set_subscription,
@@ -55,7 +57,8 @@ logger = logging.getLogger(__name__)
     ADDINCOME_ADMINID_WAIT,
     ADDINCOME_AMOUNT_WAIT,
     UPDATE_TEXT_WAIT,
-) = range(6)
+    BROADCAST_WAIT,
+) = range(7)
 
 # Context keys
 _CTX_TARGET_USER = "target_user_id"
@@ -696,6 +699,108 @@ async def revoke_premium_command(update: Update, context: ContextTypes.DEFAULT_T
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# /broadcast
+# ─────────────────────────────────────────────────────────────────────────────
+
+@require_superadmin
+async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    total = users_db.get_all_users_count()
+    await update.message.reply_text(
+        f"📢 *Broadcast Message*\n\n"
+        f"Total recipients: *{total} users*\n\n"
+        f"Send the message you want to broadcast.\n"
+        f"Supports: text, photo, video, document, GIF.\n\n"
+        f"Type /cancel to abort.",
+        parse_mode="Markdown",
+    )
+    return BROADCAST_WAIT
+
+
+async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    msg = update.message
+    all_users = users_db.get_all_users()
+    total = len(all_users)
+
+    sent = 0
+    failed = 0
+    blocked = 0
+
+    # Send progress message
+    progress_msg = await msg.reply_text(
+        f"📤 Broadcasting to {total} users...\n"
+        f"✅ Sent: 0 | ❌ Failed: 0 | 🚫 Blocked: 0"
+    )
+
+    for i, user in enumerate(all_users):
+        uid = user["user_id"]
+        try:
+            if msg.photo:
+                await context.bot.send_photo(
+                    chat_id=uid,
+                    photo=msg.photo[-1].file_id,
+                    caption=msg.caption,
+                    parse_mode="Markdown" if msg.caption else None,
+                )
+            elif msg.video:
+                await context.bot.send_video(
+                    chat_id=uid,
+                    video=msg.video.file_id,
+                    caption=msg.caption,
+                    parse_mode="Markdown" if msg.caption else None,
+                )
+            elif msg.animation:
+                await context.bot.send_animation(
+                    chat_id=uid,
+                    animation=msg.animation.file_id,
+                    caption=msg.caption,
+                    parse_mode="Markdown" if msg.caption else None,
+                )
+            elif msg.document:
+                await context.bot.send_document(
+                    chat_id=uid,
+                    document=msg.document.file_id,
+                    caption=msg.caption,
+                    parse_mode="Markdown" if msg.caption else None,
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text=msg.text,
+                    parse_mode="Markdown",
+                )
+            sent += 1
+        except Exception as e:
+            err = str(e).lower()
+            if "blocked" in err or "forbidden" in err or "deactivated" in err:
+                blocked += 1
+            else:
+                failed += 1
+
+        # Update progress every 20 users
+        if (i + 1) % 20 == 0 or (i + 1) == total:
+            try:
+                await progress_msg.edit_text(
+                    f"📤 Broadcasting to {total} users...\n"
+                    f"Progress: {i + 1}/{total}\n"
+                    f"✅ Sent: {sent} | ❌ Failed: {failed} | 🚫 Blocked: {blocked}"
+                )
+            except Exception:
+                pass
+
+    # Final summary
+    await progress_msg.edit_text(
+        f"✅ *Broadcast Complete!*\n\n"
+        f"📊 *Results:*\n"
+        f"• Total: *{total}*\n"
+        f"• ✅ Sent: *{sent}*\n"
+        f"• 🚫 Blocked/left: *{blocked}*\n"
+        f"• ❌ Failed: *{failed}*",
+        parse_mode="Markdown",
+    )
+    return ConversationHandler.END
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Handler registration
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -769,4 +874,20 @@ def register(application) -> None:
         },
         fallbacks=[cancel_handler],
         name="update_content",
+    ))
+
+    # /broadcast conversation
+    application.add_handler(ConversationHandler(
+        entry_points=[CommandHandler("broadcast", broadcast_start)],
+        states={
+            BROADCAST_WAIT: [
+                MessageHandler(
+                    (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL | filters.ANIMATION)
+                    & ~filters.COMMAND,
+                    broadcast_send,
+                ),
+            ],
+        },
+        fallbacks=[cancel_handler],
+        name="broadcast",
     ))
