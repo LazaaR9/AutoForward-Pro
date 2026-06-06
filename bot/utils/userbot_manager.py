@@ -345,7 +345,32 @@ async def start_userbot(admin_id: int, bot) -> TelegramClient | None:
         return client
 
     except Exception as exc:
-        logger.error("Failed to start userbot for admin %s: %s", admin_id, exc)
+        error_str = str(exc)
+        # Detect permanently invalidated session (used from 2 IPs simultaneously)
+        if "authorization key" in error_str.lower() or "AuthKeyDuplicated" in error_str:
+            logger.error(
+                "DEAD SESSION for admin %s — session was used from two IPs. "
+                "Auto-removing and alerting admin to re-authorize.", admin_id
+            )
+            # Wipe the dead session so the bot doesn't keep retrying it
+            remove_session(admin_id)
+            # Alert the admin via Telegram so they know to re-link
+            try:
+                await bot.send_message(
+                    chat_id=admin_id,
+                    text=(
+                        "🔴 *Session Expired — Action Required*\n\n"
+                        "Your Telegram account session was invalidated because it was used "
+                        "from two different locations at the same time.\n\n"
+                        "The bot has automatically removed the old session.\n\n"
+                        "➡️ Please send /authorize to re-link your account and resume forwarding."
+                    ),
+                    parse_mode="Markdown",
+                )
+            except Exception:
+                pass
+        else:
+            logger.error("Failed to start userbot for admin %s: %s", admin_id, exc)
         return None
 
 
