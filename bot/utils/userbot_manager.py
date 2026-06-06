@@ -464,7 +464,7 @@ def _register_forwarding_listener(
         expected_id = _normalize_id(source_channel_id)
         
         # Log every single incoming message to debug the filter
-        logger.warning(f"Received msg from {event.chat_id} (normalized: {incoming_id}). Expected source: {source_channel_id} (normalized: {expected_id})")
+        logger.debug(f"Received msg from {event.chat_id} (normalized: {incoming_id}). Expected source: {source_channel_id} (normalized: {expected_id})")
         
         if incoming_id != expected_id:
             return
