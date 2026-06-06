@@ -50,14 +50,27 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if role == "superadmin":
         await update.message.reply_text(
             "👑 *Welcome back, Super Admin!*\n\n"
-            "Use the admin panel commands to manage the bot.\n\n"
-            "📋 Commands:\n"
-            "/stats — View statistics\n"
+            "━━━━━━━━━━━━━━━\n"
+            "👥 *Admin Management*\n"
+            "/addadmin — Promote user to admin\n"
+            "/removeadmin — Demote an admin\n"
             "/alladmins — List all admins\n"
             "/allchannels — List all channels\n"
-            "/addadmin — Promote a user to admin\n"
-            "/removeadmin — Demote an admin\n"
-            "/addincome — Log a payment",
+            "/admin\\_subscriptions — View subscriptions\n"
+            "/grant\\_premium — Grant premium access\n"
+            "/revoke\\_premium — Revoke premium access\n\n"
+            "💰 *Payments & Income*\n"
+            "/addincome — Log a manual payment\n"
+            "/stats — View system statistics\n\n"
+            "📢 *Broadcast & Content*\n"
+            "/broadcast — Send message to all users\n"
+            "/update — Edit bot content (welcome msg etc.)\n\n"
+            "🤝 *Referral System*\n"
+            "/referralstats — Top referrers leaderboard\n"
+            "/editreferral — Adjust a user's referral balance\n"
+            "/refer — Your own referral dashboard\n\n"
+            "━━━━━━━━━━━━━━━\n"
+            "Type /cancel to abort any active conversation.",
             parse_mode="Markdown",
         )
         return
