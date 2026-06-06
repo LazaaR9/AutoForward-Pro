@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 # Session storage
 # ─────────────────────────────────────────────────────────────────────────────
 _clients: dict[int, TelegramClient] = {}
+_tasks:   dict[int, list] = {}          # admin_id -> list of background asyncio tasks
 _session_dir = os.path.expanduser("~/.tg_bot_sessions")
 os.makedirs(_session_dir, exist_ok=True)
 
@@ -335,9 +336,10 @@ async def start_userbot(admin_id: int, bot) -> TelegramClient | None:
             _register_forwarding_listener(client, admin_id, source_id, bot)
             logger.info("Userbot listening on source %s for admin %s", source_id, admin_id)
 
-            # Start connection health monitor and fallback poller
-            asyncio.create_task(_connection_monitor(client, admin_id, bot))
-            asyncio.create_task(_channel_poller(client, bot, admin_id, source_id))
+            # Start connection health monitor and fallback poller — track for clean shutdown
+            t1 = asyncio.create_task(_connection_monitor(client, admin_id, bot))
+            t2 = asyncio.create_task(_channel_poller(client, bot, admin_id, source_id))
+            _tasks.setdefault(admin_id, []).extend([t1, t2])
 
         _clients[admin_id] = client
         return client
@@ -535,23 +537,59 @@ async def _fast_forward(
     text_changed: bool,
 ) -> None:
     """
-    Telethon-native message copy — uses Telegram's internal file references.
-    No file download, no re-upload, near-instant delivery.
-    Raises on failure so the caller can fall back to Bot API.
-    Has a 10-second timeout to prevent hanging.
+    Telethon-native message copy.
+    - No text change: uses forward_messages() which is 100% lossless — preserves
+      premium stickers, custom emoji, large files, and all media quality.
+    - Text changed by filter: re-sends with original entities so custom emoji
+      and formatting are preserved even in the modified text.
+    - Protected channel: catches ChatForwardsRestrictedError and copies content.
     """
-    async def _send():
-        # Use pre-resolved entity if available, otherwise raw ID
-        entity = _resolved_entities.get(target_id, target_id)
-        if not text_changed:
-            await client.send_message(entity, event.message)
-        elif event.message.media:
-            await client.send_message(entity, message=filtered_text, file=event.message.media)
-        elif filtered_text:
-            await client.send_message(entity, filtered_text)
+    from telethon.errors import ChatForwardsRestrictedError
 
-    # Timeout prevents hanging if entity resolution or network is slow
-    await asyncio.wait_for(_send(), timeout=10.0)
+    async def _send():
+        entity = _resolved_entities.get(target_id, target_id)
+        try:
+            if not text_changed:
+                # Most faithful copy — preserves ALL premium content (stickers,
+                # custom emoji, large files, video quality) without re-encoding.
+                await client.forward_messages(entity, event.message)
+            elif event.message.media:
+                # Text changed by filter — re-send media with filtered caption.
+                # Pass original entities to preserve custom emoji in caption.
+                await client.send_message(
+                    entity,
+                    message=filtered_text,
+                    file=event.message.media,
+                    formatting_entities=event.message.entities,
+                    force_document=False,
+                )
+            elif filtered_text:
+                # Text-only message with filter applied
+                await client.send_message(
+                    entity,
+                    filtered_text,
+                    formatting_entities=event.message.entities,
+                )
+        except ChatForwardsRestrictedError:
+            # Protected/no-forward source channel:
+            # Re-send as a fresh new message (not a forward) to bypass restriction.
+            logger.info("Protected source — copying as new message to %s", target_id)
+            if event.message.media:
+                await client.send_message(
+                    entity,
+                    message=filtered_text,
+                    file=event.message.media,
+                    formatting_entities=event.message.entities,
+                    force_document=False,
+                )
+            elif filtered_text:
+                await client.send_message(
+                    entity,
+                    filtered_text,
+                    formatting_entities=event.message.entities,
+                )
+
+    await asyncio.wait_for(_send(), timeout=15.0)
 
 
 async def _slow_forward(
@@ -634,6 +672,15 @@ async def restart_userbot_listener(admin_id: int, bot) -> None:
 
 
 async def stop_userbot(admin_id: int) -> None:
+    # Cancel all background tasks first so they don't get "destroyed while pending"
+    for task in _tasks.pop(admin_id, []):
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+
     client = _clients.pop(admin_id, None)
     if client:
         try:
