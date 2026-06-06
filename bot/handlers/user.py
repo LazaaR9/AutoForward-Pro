@@ -89,32 +89,38 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 f"📅 Subscription expires: `{sub_end.strftime('%Y-%m-%d') if sub_end else 'N/A'}`\n"
                 f"⏳ Days remaining: *{days_left}*\n\n"
                 f"⚠️ *Telegram Account Not Linked*\n"
-                f"To start using the forwarding features, you must first authorize your Telegram account.\n\n"
-                f"👉 Please run /authorize to link your account and start forwarding!",
+                f"Your account is not linked yet. Please authorize first to start forwarding.\n\n"
+                f"👉 /authorize — Link your Telegram account\n\n"
+                f"💡 Need help? Send /help",
                 parse_mode="Markdown",
             )
             return
 
-        # Fully authorized admin — show all commands EXCEPT /authorize
+        # Fully authorized admin — show all commands in organized sections
         await update.message.reply_text(
             f"🔑 *Welcome back, Admin!*\n\n"
-            f"📅 Subscription expires: `{sub_end.strftime('%Y-%m-%d') if sub_end else 'N/A'}`\n"
-            f"⏳ Days remaining: *{days_left}*\n\n"
-            f"➡️ *Getting Started:*\n"
-            f"1. /addsource — Set where to copy from\n"
-            f"2. /addtarget — Set where to forward to\n"
-            f"3. /filter — (Optional) Set replacements\n\n"
-            f"📋 All Commands:\n"
+            f"📅 Subscription: `{sub_end.strftime('%Y-%m-%d') if sub_end else 'N/A'}` | *{days_left} days left*\n\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"📡 *Forwarding*\n"
             f"/addsource — Set source channel\n"
             f"/removesource — Remove source channel\n"
             f"/addtarget — Add a target channel\n"
-            f"/removetarget — Remove a target channel\n"
-            f"/filter — Add text filter\n"
-            f"/myfilters — View/remove filters\n"
+            f"/removetarget — Remove a target channel\n\n"
+            f"🔍 *Filters*\n"
+            f"/filter — Add text/keyword filter\n"
+            f"/myfilters — View & remove filters\n\n"
+            f"⏰ *Scheduling*\n"
             f"/schedule — Schedule a message\n"
-            f"/removeschedule — Remove a schedule\n"
-            f"/mystatus — View subscription\n"
-            f"/refer — Refer & Earn 💰",
+            f"/removeschedule — Remove a schedule\n\n"
+            f"👤 *Account*\n"
+            f"/mystatus — View subscription status\n"
+            f"/plan — Check plan details\n"
+            f"/pro — Upgrade / renew plan\n\n"
+            f"🤝 *Referral & Earnings*\n"
+            f"/refer — Referral dashboard & link\n"
+            f"/withdraw — Cash out your earnings\n\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"💡 Need help? Send /help",
             parse_mode="Markdown",
         )
         return
