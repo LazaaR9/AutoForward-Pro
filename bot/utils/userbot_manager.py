@@ -574,30 +574,24 @@ async def _fast_forward(
     async def _send():
         entity = _resolved_entities.get(target_id, target_id)
         try:
-            if not text_changed:
-                # Most faithful copy — preserves ALL premium content (stickers,
-                # custom emoji, large files, video quality) without re-encoding.
-                await client.forward_messages(entity, event.message)
-            elif event.message.media:
-                # Text changed by filter — re-send media with filtered caption.
-                # Pass original entities to preserve custom emoji in caption.
+            # Always copy as a fresh new message — removes "Forwarded from" label.
+            # Pass original entities to preserve formatting and custom emoji.
+            if event.message.media:
                 await client.send_message(
                     entity,
                     message=filtered_text,
                     file=event.message.media,
-                    formatting_entities=event.message.entities,
+                    formatting_entities=event.message.entities if not text_changed else None,
                     force_document=False,
                 )
             elif filtered_text:
-                # Text-only message with filter applied
                 await client.send_message(
                     entity,
                     filtered_text,
-                    formatting_entities=event.message.entities,
+                    formatting_entities=event.message.entities if not text_changed else None,
                 )
         except ChatForwardsRestrictedError:
-            # Protected/no-forward source channel:
-            # Re-send as a fresh new message (not a forward) to bypass restriction.
+            # Protected/no-forward source: re-send without forward reference
             logger.info("Protected source — copying as new message to %s", target_id)
             if event.message.media:
                 await client.send_message(
