@@ -630,14 +630,16 @@ async def _process_and_forward(
                 if any(r["find_text"] == "<BLOCK_APK>" for r in rules):
                     return
 
+        text_changed = filtered_text != original_text
+
         logger.info(
-            "⚡ Forwarding msg from source (admin %s) → %d target(s) | media=%s",
-            admin_id, len(targets), bool(event.message.media),
+            "⚡ Forwarding msg from source (admin %s) → %d target(s) | media=%s | text_changed=%s",
+            admin_id, len(targets), bool(event.message.media), text_changed,
         )
 
         # ── Phase 1: Telethon-native fast path (instant, zero bandwidth) ─
         fast_results = await asyncio.gather(
-            *[_fast_forward(client, t["channel_id"], event, filtered_text, filtered_entities)
+            *[_fast_forward(client, t["channel_id"], event, filtered_text, filtered_entities, text_changed)
               for t in targets],
             return_exceptions=True,
         )
@@ -671,56 +673,93 @@ async def _fast_forward(
     event,
     filtered_text: str,
     entities: list,
+    text_changed: bool,
 ) -> None:
     """
     Telethon-native message delivery.
-    Sends message as a NEW message (not forwarded) to:
-    1. Avoid any 'Forwarded from' label.
-    2. Preserve all formatting, styling, and premium custom emojis using formatting_entities.
-    3. Reuse server-side media references to avoid downloading/uploading.
+    Sends message as:
+    1. A cloned message via `client.send_message(entity, event.message)` if text did NOT change.
+       This preserves premium animated stickers, custom emojis, formatting, and media perfectly
+       without any "Forwarded from" header, and uses server-side references (instant).
+    2. A new message (with filtered_text and aligned entities) if text DID change.
     """
     async def _send():
         entity = _resolved_entities.get(target_id, target_id)
         
-        # 1. If the message contains media
-        if event.message.media:
+        # Scenario A: Text has NOT changed. We clone the original message object directly.
+        # This keeps premium stickers, custom emojis, formatting, and file references 100% intact.
+        if not text_changed:
             try:
-                # Try to send reusing the media reference (instant, server-side)
-                await client.send_file(
-                    entity,
-                    file=event.message.media,
-                    caption=filtered_text or None,
-                    formatting_entities=entities,
-                )
+                await client.send_message(entity, event.message)
             except Exception as exc:
-                # If it's a restricted channel or reference expired, download and upload
-                logger.info("Failed to copy media reference for %s: %s. Retrying via download/upload.", target_id, exc)
-                temp_dir = os.path.join(os.getcwd(), "scratch", "temp_media")
-                os.makedirs(temp_dir, exist_ok=True)
-                media_path = await event.message.download_media(file=temp_dir)
+                logger.info("Failed to clone message %s directly: %s. Retrying via download/upload.", event.message.id, exc)
+                # Fallback: if it fails (restricted channel, media reference expired), we download and upload.
+                if event.message.media:
+                    temp_dir = os.path.join(os.getcwd(), "scratch", "temp_media")
+                    os.makedirs(temp_dir, exist_ok=True)
+                    media_path = await event.message.download_media(file=temp_dir)
+                    try:
+                        await client.send_file(
+                            entity,
+                            file=media_path,
+                            caption=filtered_text or None,
+                            formatting_entities=entities,
+                        )
+                    except Exception as upload_exc:
+                        logger.error("Clone fallback upload failed for target %s: %s", target_id, upload_exc)
+                        raise upload_exc
+                    finally:
+                        if media_path and os.path.exists(media_path):
+                            try:
+                                os.remove(media_path)
+                            except Exception:
+                                pass
+                elif filtered_text:
+                    await client.send_message(
+                        entity,
+                        message=filtered_text,
+                        formatting_entities=entities,
+                    )
+        
+        # Scenario B: Text has changed. We must send a new message with the modified text/entities.
+        else:
+            if event.message.media:
                 try:
+                    # Try reusing server-side media reference first
                     await client.send_file(
                         entity,
-                        file=media_path,
+                        file=event.message.media,
                         caption=filtered_text or None,
                         formatting_entities=entities,
                     )
-                except Exception as upload_exc:
-                    logger.error("Download and upload failed for target %s: %s", target_id, upload_exc)
-                    raise upload_exc
-                finally:
-                    if media_path and os.path.exists(media_path):
-                        try:
-                            os.remove(media_path)
-                        except Exception:
-                            pass
-        # 2. If the message is text-only
-        elif filtered_text:
-            await client.send_message(
-                entity,
-                message=filtered_text,
-                formatting_entities=entities,
-            )
+                except Exception as exc:
+                    # If that fails (restricted channel, expired reference), download and upload
+                    logger.info("Failed to copy media reference for %s: %s. Retrying via download/upload.", target_id, exc)
+                    temp_dir = os.path.join(os.getcwd(), "scratch", "temp_media")
+                    os.makedirs(temp_dir, exist_ok=True)
+                    media_path = await event.message.download_media(file=temp_dir)
+                    try:
+                        await client.send_file(
+                            entity,
+                            file=media_path,
+                            caption=filtered_text or None,
+                            formatting_entities=entities,
+                        )
+                    except Exception as upload_exc:
+                        logger.error("Download and upload failed for target %s: %s", target_id, upload_exc)
+                        raise upload_exc
+                    finally:
+                        if media_path and os.path.exists(media_path):
+                            try:
+                                os.remove(media_path)
+                            except Exception:
+                                pass
+            elif filtered_text:
+                await client.send_message(
+                    entity,
+                    message=filtered_text,
+                    formatting_entities=entities,
+                )
 
     await asyncio.wait_for(_send(), timeout=30.0)
 
