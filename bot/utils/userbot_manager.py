@@ -354,11 +354,26 @@ async def _resolve_target(client: TelegramClient, channel_id: int) -> bool:
     if channel_id in _resolved_entities:
         return True
     try:
-        entity = await client.get_input_entity(channel_id)
+        entity = await client.get_entity(channel_id)
         _resolved_entities[channel_id] = entity
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to pre-resolve target %s: %s", channel_id, e)
         return False
+
+
+async def _get_target_entity(client: TelegramClient, target_id: int) -> Any:
+    """Retrieve target entity from cache, or resolve it dynamically on demand."""
+    entity = _resolved_entities.get(target_id)
+    if entity is not None:
+        return entity
+    try:
+        entity = await client.get_entity(target_id)
+        _resolved_entities[target_id] = entity
+        return entity
+    except Exception as e:
+        logger.warning("Failed to dynamically resolve target entity %s: %s", target_id, e)
+        return target_id
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -684,7 +699,7 @@ async def _fast_forward(
     2. A new message (with filtered_text and aligned entities) if text DID change.
     """
     async def _send():
-        entity = _resolved_entities.get(target_id, target_id)
+        entity = await _get_target_entity(client, target_id)
         
         # Scenario A: Text has NOT changed. We clone the original message object directly.
         # This keeps premium stickers, custom emojis, formatting, and file references 100% intact.
