@@ -346,33 +346,35 @@ def remove_session(admin_id: int) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Resolved entity cache — avoids slow get_input_entity on every send
 from typing import Any
-_resolved_entities: dict[int, Any] = {}  # channel_id -> InputPeer
+_resolved_entities: dict[int, dict[int, Any]] = {}  # admin_id -> {channel_id -> entity}
 
 
-async def _resolve_target(client: TelegramClient, channel_id: int) -> bool:
+async def _resolve_target(client: TelegramClient, admin_id: int, channel_id: int) -> bool:
     """Pre-resolve a target entity and cache it. Returns True on success."""
-    if channel_id in _resolved_entities:
+    _resolved_entities.setdefault(admin_id, {})
+    if channel_id in _resolved_entities[admin_id]:
         return True
     try:
         entity = await client.get_entity(channel_id)
-        _resolved_entities[channel_id] = entity
+        _resolved_entities[admin_id][channel_id] = entity
         return True
     except Exception as e:
-        logger.warning("Failed to pre-resolve target %s: %s", channel_id, e)
+        logger.warning("Failed to pre-resolve target %s for admin %s: %s", channel_id, admin_id, e)
         return False
 
 
-async def _get_target_entity(client: TelegramClient, target_id: int) -> Any:
+async def _get_target_entity(client: TelegramClient, admin_id: int, target_id: int) -> Any:
     """Retrieve target entity from cache, or resolve it dynamically on demand."""
-    entity = _resolved_entities.get(target_id)
+    _resolved_entities.setdefault(admin_id, {})
+    entity = _resolved_entities[admin_id].get(target_id)
     if entity is not None:
         return entity
     try:
         entity = await client.get_entity(target_id)
-        _resolved_entities[target_id] = entity
+        _resolved_entities[admin_id][target_id] = entity
         return entity
     except Exception as e:
-        logger.warning("Failed to dynamically resolve target entity %s: %s", target_id, e)
+        logger.warning("Failed to dynamically resolve target entity %s for admin %s: %s", target_id, admin_id, e)
         return target_id
 
 
@@ -451,7 +453,7 @@ async def start_userbot(admin_id: int, bot) -> TelegramClient | None:
             # Pre-resolve target entities so send_message doesn't need to resolve each time
             for t in targets:
                 tid = t["channel_id"]
-                ok = await _resolve_target(client, tid)
+                ok = await _resolve_target(client, admin_id, tid)
                 if ok:
                     logger.info("  ✓ Pre-resolved target %s for admin %s", tid, admin_id)
                 else:
@@ -654,7 +656,7 @@ async def _process_and_forward(
 
         # ── Phase 1: Telethon-native fast path (instant, zero bandwidth) ─
         fast_results = await asyncio.gather(
-            *[_fast_forward(client, t["channel_id"], event, filtered_text, filtered_entities, text_changed)
+            *[_fast_forward(client, t["channel_id"], event, filtered_text, filtered_entities, text_changed, admin_id)
               for t in targets],
             return_exceptions=True,
         )
@@ -689,6 +691,7 @@ async def _fast_forward(
     filtered_text: str,
     entities: list,
     text_changed: bool,
+    admin_id: int,
 ) -> None:
     """
     Telethon-native message delivery.
@@ -699,7 +702,7 @@ async def _fast_forward(
     2. A new message (with filtered_text and aligned entities) if text DID change.
     """
     async def _send():
-        entity = await _get_target_entity(client, target_id)
+        entity = await _get_target_entity(client, admin_id, target_id)
         
         # Scenario A: Text has NOT changed. We clone the original message object directly.
         # This keeps premium stickers, custom emojis, formatting, and file references 100% intact.
@@ -848,13 +851,8 @@ async def _slow_forward(
 
 async def restart_userbot_listener(admin_id: int, bot) -> None:
     invalidate_cache(admin_id)
-    # Clear pre-resolved entities for this admin's targets
-    try:
-        targets = channels_db.get_target_channels(admin_id)
-        for t in targets:
-            _resolved_entities.pop(t["channel_id"], None)
-    except Exception:
-        pass
+    # Clear pre-resolved entities for this admin
+    _resolved_entities.pop(admin_id, None)
     await stop_userbot(admin_id)
     await start_userbot(admin_id, bot)
 
