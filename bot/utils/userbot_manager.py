@@ -97,33 +97,143 @@ def invalidate_cache(admin_id: int) -> None:
     _filter_cache.pop(admin_id, None)
 
 
-def _apply_cached_filters(rules: list[dict], text: str | None) -> str | None:
-    """Apply filter rules using pre-fetched rules (no DB call)."""
+def _adjust_entities_for_replacement(
+    text: str,
+    entities: list,
+    pattern_or_find: str | re.Pattern,
+    replace_str: str,
+    is_regex: bool = False,
+) -> tuple[str, list]:
+    """
+    Replaces pattern_or_find with replace_str in text and adjusts entity offsets and lengths.
+    Handles multiple matches of pattern_or_find.
+    """
+    from telethon import types
+    matches = []
+    if is_regex:
+        if isinstance(pattern_or_find, str):
+            regex = re.compile(pattern_or_find)
+        else:
+            regex = pattern_or_find
+        for match in regex.finditer(text):
+            matches.append((match.start(), match.end()))
+    else:
+        find_len = len(pattern_or_find)
+        if find_len > 0:
+            start = 0
+            while True:
+                pos = text.find(pattern_or_find, start)
+                if pos == -1:
+                    break
+                matches.append((pos, pos + find_len))
+                start = pos + find_len
+
+    if not matches:
+        return text, entities
+
+    current_entities = []
+    for e in entities:
+        if isinstance(e, types.MessageEntityBold):
+            current_entities.append(types.MessageEntityBold(e.offset, e.length))
+        elif isinstance(e, types.MessageEntityItalic):
+            current_entities.append(types.MessageEntityItalic(e.offset, e.length))
+        elif isinstance(e, types.MessageEntityCode):
+            current_entities.append(types.MessageEntityCode(e.offset, e.length))
+        elif isinstance(e, types.MessageEntityCustomEmoji):
+            current_entities.append(types.MessageEntityCustomEmoji(e.offset, e.length, e.document_id))
+        elif isinstance(e, types.MessageEntityTextUrl):
+            current_entities.append(types.MessageEntityTextUrl(e.offset, e.length, e.url))
+        elif isinstance(e, types.MessageEntityMention):
+            current_entities.append(types.MessageEntityMention(e.offset, e.length))
+        elif isinstance(e, types.MessageEntityUrl):
+            current_entities.append(types.MessageEntityUrl(e.offset, e.length))
+        else:
+            try:
+                current_entities.append(e.__class__(e.offset, e.length))
+            except Exception:
+                current_entities.append(e)
+
+    matches.sort(key=lambda x: x[0])
+
+    adjusted_entities = []
+    for entity in current_entities:
+        e_start = entity.offset
+        e_end = entity.offset + entity.length
+
+        new_e_start = e_start
+        new_e_end = e_end
+
+        for start, end in matches:
+            diff = len(replace_str) - (end - start)
+
+            if end <= e_start:
+                new_e_start += diff
+            elif start <= e_start < end:
+                new_e_start += (start - e_start)
+
+            if end <= e_end:
+                new_e_end += diff
+            elif start <= e_end < end:
+                new_e_end += (start + len(replace_str) - e_end)
+
+        new_len = new_e_end - new_e_start
+        if new_len > 0:
+            entity.offset = new_e_start
+            entity.length = new_len
+            adjusted_entities.append(entity)
+
+    new_text_parts = []
+    last_end = 0
+    for start, end in matches:
+        new_text_parts.append(text[last_end:start])
+        new_text_parts.append(replace_str)
+        last_end = end
+    new_text_parts.append(text[last_end:])
+    new_text = "".join(new_text_parts)
+
+    return new_text, adjusted_entities
+
+
+def _apply_cached_filters_with_entities(
+    rules: list[dict],
+    text: str | None,
+    entities: list | None,
+) -> tuple[str | None, list]:
+    """Apply filter rules on text and adjust entity offsets simultaneously."""
     if text is None:
-        return None
+        return None, []
+
+    if entities is None:
+        entities = []
 
     # Block rules first
     for rule in rules:
         if rule["find_text"] == "<BLOCK>":
             if rule["replace_text"].lower() in text.lower():
-                return None  # Signal to block this message
+                return None, []  # Signal to block this message
 
     # Regex wildcard rules
     for rule in rules:
         find = rule["find_text"]
         replace = rule["replace_text"]
         if find == "<ALL_LINKS>":
-            text = re.sub(r'https?://\S+|www\.\S+|t\.me/\S+', replace, text)
+            text, entities = _adjust_entities_for_replacement(
+                text, entities, r'https?://\S+|www\.\S+|t\.me/\S+', replace, is_regex=True
+            )
         elif find == "<ALL_USERNAMES>":
-            text = re.sub(r'@[a-zA-Z0-9_]+', replace, text)
+            text, entities = _adjust_entities_for_replacement(
+                text, entities, r'@[a-zA-Z0-9_]+', replace, is_regex=True
+            )
 
     # Exact match rules
     for rule in rules:
         find = rule["find_text"]
         if find not in ("<ALL_LINKS>", "<ALL_USERNAMES>", "<BLOCK>", "<BLOCK_APK>"):
-            text = text.replace(find, rule["replace_text"])
+            text, entities = _adjust_entities_for_replacement(
+                text, entities, find, rule["replace_text"], is_regex=False
+            )
 
-    return text
+    return text, entities
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -506,7 +616,10 @@ async def _process_and_forward(
 
         rules = await _get_cached_filters(admin_id)
         original_text = event.message.message or ""
-        filtered_text = _apply_cached_filters(rules, original_text)
+        original_entities = event.message.entities or []
+        filtered_text, filtered_entities = _apply_cached_filters_with_entities(
+            rules, original_text, original_entities
+        )
 
         if filtered_text is None:
             return  # Blocked by keyword filter
@@ -517,16 +630,14 @@ async def _process_and_forward(
                 if any(r["find_text"] == "<BLOCK_APK>" for r in rules):
                     return
 
-        text_changed = filtered_text != original_text
-
         logger.info(
-            "⚡ Forwarding msg from source (admin %s) → %d target(s) | text_changed=%s",
-            admin_id, len(targets), text_changed,
+            "⚡ Forwarding msg from source (admin %s) → %d target(s) | media=%s",
+            admin_id, len(targets), bool(event.message.media),
         )
 
         # ── Phase 1: Telethon-native fast path (instant, zero bandwidth) ─
         fast_results = await asyncio.gather(
-            *[_fast_forward(client, t["channel_id"], event, filtered_text, text_changed)
+            *[_fast_forward(client, t["channel_id"], event, filtered_text, filtered_entities)
               for t in targets],
             return_exceptions=True,
         )
@@ -559,56 +670,60 @@ async def _fast_forward(
     target_id: int,
     event,
     filtered_text: str,
-    text_changed: bool,
+    entities: list,
 ) -> None:
     """
-    Telethon-native message copy.
-    - No text change: uses forward_messages() which is 100% lossless — preserves
-      premium stickers, custom emoji, large files, and all media quality.
-    - Text changed by filter: re-sends with original entities so custom emoji
-      and formatting are preserved even in the modified text.
-    - Protected channel: catches ChatForwardsRestrictedError and copies content.
+    Telethon-native message delivery.
+    Sends message as a NEW message (not forwarded) to:
+    1. Avoid any 'Forwarded from' label.
+    2. Preserve all formatting, styling, and premium custom emojis using formatting_entities.
+    3. Reuse server-side media references to avoid downloading/uploading.
     """
-    from telethon.errors import ChatForwardsRestrictedError
-
     async def _send():
         entity = _resolved_entities.get(target_id, target_id)
-        try:
-            # Always copy as a fresh new message — removes "Forwarded from" label.
-            # Pass original entities to preserve formatting and custom emoji.
-            if event.message.media:
-                await client.send_message(
+        
+        # 1. If the message contains media
+        if event.message.media:
+            try:
+                # Try to send reusing the media reference (instant, server-side)
+                await client.send_file(
                     entity,
-                    message=filtered_text,
                     file=event.message.media,
-                    formatting_entities=event.message.entities if not text_changed else None,
-                    force_document=False,
+                    caption=filtered_text or None,
+                    formatting_entities=entities,
                 )
-            elif filtered_text:
-                await client.send_message(
-                    entity,
-                    filtered_text,
-                    formatting_entities=event.message.entities if not text_changed else None,
-                )
-        except ChatForwardsRestrictedError:
-            # Protected/no-forward source: re-send without forward reference
-            logger.info("Protected source — copying as new message to %s", target_id)
-            if event.message.media:
-                await client.send_message(
-                    entity,
-                    message=filtered_text,
-                    file=event.message.media,
-                    formatting_entities=event.message.entities,
-                    force_document=False,
-                )
-            elif filtered_text:
-                await client.send_message(
-                    entity,
-                    filtered_text,
-                    formatting_entities=event.message.entities,
-                )
+            except Exception as exc:
+                # If it's a restricted channel or reference expired, download and upload
+                logger.info("Failed to copy media reference for %s: %s. Retrying via download/upload.", target_id, exc)
+                temp_dir = os.path.join(os.getcwd(), "scratch", "temp_media")
+                os.makedirs(temp_dir, exist_ok=True)
+                media_path = await event.message.download_media(file=temp_dir)
+                try:
+                    await client.send_file(
+                        entity,
+                        file=media_path,
+                        caption=filtered_text or None,
+                        formatting_entities=entities,
+                    )
+                except Exception as upload_exc:
+                    logger.error("Download and upload failed for target %s: %s", target_id, upload_exc)
+                    raise upload_exc
+                finally:
+                    if media_path and os.path.exists(media_path):
+                        try:
+                            os.remove(media_path)
+                        except Exception:
+                            pass
+        # 2. If the message is text-only
+        elif filtered_text:
+            await client.send_message(
+                entity,
+                message=filtered_text,
+                formatting_entities=entities,
+            )
 
-    await asyncio.wait_for(_send(), timeout=15.0)
+    await asyncio.wait_for(_send(), timeout=30.0)
+
 
 
 async def _slow_forward(
