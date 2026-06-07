@@ -60,6 +60,12 @@ async def _send_scheduled_message(
     frequency: str,
 ) -> None:
     """Job callback: send content to all of admin's target channels."""
+    from bot.utils import userbot_manager
+    is_working = await userbot_manager.is_admin_working(admin_id)
+    if not is_working:
+        logger.info("Schedule %s fired but admin %s has stopped the bot (/stop). Skipping.", schedule_id, admin_id)
+        return
+
     targets = get_target_channels(admin_id)
     if not targets:
         logger.warning("Schedule %s fired but admin %s has no target channels.", schedule_id, admin_id)

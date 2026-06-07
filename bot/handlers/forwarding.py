@@ -47,6 +47,12 @@ async def forward_channel_post(update: Update, context: ContextTypes.DEFAULT_TYP
 
     from bot.utils import userbot_manager
     for admin_id in admin_ids:
+        # Check if bot is stopped for this admin
+        is_working = await userbot_manager.is_admin_working(admin_id)
+        if not is_working:
+            logger.debug("Skipping Bot API forwarding for admin %s since bot is stopped (/stop).", admin_id)
+            continue
+
         # If userbot session is active, let it handle forwarding to prevent double posts
         if userbot_manager.is_userbot_authorized(admin_id):
             logger.debug("Skipping Bot API forwarding for admin %s since userbot is active.", admin_id)

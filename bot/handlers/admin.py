@@ -145,11 +145,38 @@ async def _cleanup_auth(context: ContextTypes.DEFAULT_TYPE, admin_id: int) -> No
     context.user_data.pop("auth_code_hash", None)
 
 
+async def _clear_other_conversations(update: Update, context: ContextTypes.DEFAULT_TYPE, current_name: str) -> None:
+    """Safely clear active conversation states for this user from all other handlers."""
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    user_id = update.effective_user.id if update.effective_user else None
+    if not chat_id or not user_id:
+        return
+
+    # If clearing "authorize", make sure to clean up any pending client
+    if current_name != "authorize":
+        await _cleanup_auth(context, user_id)
+
+    # Clear user_data to start with a fresh slate for the new command
+    if hasattr(context, "user_data") and isinstance(context.user_data, dict):
+        context.user_data.clear()
+
+    # Loop through all handler groups and their registered handlers
+    if hasattr(context, "application") and hasattr(context.application, "handlers"):
+        for group in context.application.handlers.values():
+            for handler in group:
+                if isinstance(handler, ConversationHandler):
+                    if handler.name != current_name:
+                        handler._conversations.pop((chat_id, user_id), None)
+                        handler._conversations.pop((user_id,), None)
+                        handler._conversations.pop((chat_id,), None)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # /authorize — OTP login
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def authorize_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await _clear_other_conversations(update, context, "authorize")
     admin_id = update.effective_user.id
 
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
@@ -390,6 +417,7 @@ async def _check_authorized(update: Update, admin_id: int) -> bool:
 
 @require_admin
 async def addsource_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await _clear_other_conversations(update, context, "addsource")
     admin_id = update.effective_user.id
     if not await _check_authorized(update, admin_id):
         return ConversationHandler.END
@@ -478,6 +506,7 @@ async def addsource_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 @require_admin
 async def addtarget_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await _clear_other_conversations(update, context, "addtarget")
     admin_id = update.effective_user.id
     if not await _check_authorized(update, admin_id):
         return ConversationHandler.END
@@ -628,6 +657,7 @@ async def removetarget_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 @require_admin
 async def filter_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await _clear_other_conversations(update, context, "filter")
     admin_id = update.effective_user.id
     if not await _check_authorized(update, admin_id):
         return ConversationHandler.END
@@ -857,6 +887,7 @@ async def mystatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 @require_admin
 async def schedule_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await _clear_other_conversations(update, context, "schedule")
     admin_id = update.effective_user.id
     if not await _check_authorized(update, admin_id):
         return ConversationHandler.END
@@ -992,6 +1023,46 @@ async def removeschedule_callback(update: Update, context: ContextTypes.DEFAULT_
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# /work and /stop commands
+# ─────────────────────────────────────────────────────────────────────────────
+
+@require_admin
+async def work_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    admin_id = update.effective_user.id
+    from bot.db.supabase_client import get_client
+    db = get_client()
+    try:
+        db.table("users").update({"is_working": True}).eq("user_id", admin_id).execute()
+        invalidate_cache(admin_id)
+        await update.message.reply_text("▶️ *Bot Started Working*\n\nForwarding and scheduled messages are now active.", parse_mode="Markdown")
+    except Exception as e:
+        logger.error("Failed to update working status to True: %s", e)
+        await update.message.reply_text(
+            "❌ *Failed to start bot*\n\n"
+            "Please verify that the database has been migrated with the new `is_working` column.",
+            parse_mode="Markdown"
+        )
+
+
+@require_admin
+async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    admin_id = update.effective_user.id
+    from bot.db.supabase_client import get_client
+    db = get_client()
+    try:
+        db.table("users").update({"is_working": False}).eq("user_id", admin_id).execute()
+        invalidate_cache(admin_id)
+        await update.message.reply_text("⏸️ *Bot Stopped Working*\n\nForwarding and scheduled messages are now paused.", parse_mode="Markdown")
+    except Exception as e:
+        logger.error("Failed to update working status to False: %s", e)
+        await update.message.reply_text(
+            "❌ *Failed to stop bot*\n\n"
+            "Please verify that the database has been migrated with the new `is_working` column.",
+            parse_mode="Markdown"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # /cancel (shared fallback)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1101,6 +1172,8 @@ def register(application) -> None:
     application.add_handler(CommandHandler("myfilters", myfilters_command))
     application.add_handler(CommandHandler("removeschedule", removeschedule_command))
     application.add_handler(CommandHandler("mystatus", mystatus_command))
+    application.add_handler(CommandHandler("work", work_command))
+    application.add_handler(CommandHandler("stop", stop_command))
 
     # Callback query handlers
     application.add_handler(CallbackQueryHandler(myfilters_callback, pattern=r"^rmfilter:"))

@@ -60,6 +60,7 @@ os.makedirs(_session_dir, exist_ok=True)
 # ─────────────────────────────────────────────────────────────────────────────
 _target_cache: dict[int, dict] = {}   # admin_id -> {"data": list, "ts": float}
 _filter_cache: dict[int, dict] = {}   # admin_id -> {"data": list, "ts": float}
+_working_cache: dict[int, dict] = {}  # admin_id -> {"data": bool, "ts": float}
 _CACHE_TTL = 300  # 5 minutes
 
 from collections import OrderedDict
@@ -91,10 +92,31 @@ async def _get_cached_filters(admin_id: int) -> list[dict]:
     return data
 
 
+async def _get_cached_working_status(admin_id: int) -> bool:
+    """Return working status of the admin from cache, refreshing if stale."""
+    cached = _working_cache.get(admin_id)
+    if cached and (time.time() - cached["ts"]) < _CACHE_TTL:
+        return cached["data"]
+    
+    loop = asyncio.get_running_loop()
+    user = await loop.run_in_executor(None, users_db.get_user, admin_id)
+    is_working = user.get("is_working", True) if user else True
+    if is_working is None:
+        is_working = True
+    _working_cache[admin_id] = {"data": bool(is_working), "ts": time.time()}
+    return _working_cache[admin_id]["data"]
+
+
+async def is_admin_working(admin_id: int) -> bool:
+    """Public helper to check if admin's bot status is active/working."""
+    return await _get_cached_working_status(admin_id)
+
+
 def invalidate_cache(admin_id: int) -> None:
     """Call when an admin changes targets, filters, or source channel."""
     _target_cache.pop(admin_id, None)
     _filter_cache.pop(admin_id, None)
+    _working_cache.pop(admin_id, None)
 
 
 def _adjust_entities_for_replacement(
@@ -587,6 +609,10 @@ def _register_forwarding_listener(
 
     @client.on(events.NewMessage())
     async def handler(event):
+        # Skip grouped messages (albums) in NewMessage handler to let the Album handler process them
+        if event.message.grouped_id is not None:
+            return
+
         incoming_id = _normalize_id(event.chat_id)
         expected_id = _normalize_id(source_channel_id)
         
@@ -597,6 +623,15 @@ def _register_forwarding_listener(
             return
         # Fire-and-forget: handler returns instantly, forwarding runs in background
         asyncio.create_task(_process_and_forward(client, bot, event, admin_id))
+
+    @client.on(events.Album())
+    async def album_handler(event):
+        incoming_id = _normalize_id(event.chat_id)
+        expected_id = _normalize_id(source_channel_id)
+        
+        if incoming_id != expected_id:
+            return
+        asyncio.create_task(_process_and_forward_album(client, bot, event, admin_id))
 
 
 async def _process_and_forward(
@@ -629,6 +664,12 @@ async def _process_and_forward(
         # ── Get targets and filters from cache (NEVER blocks event loop) ─
         targets = await _get_cached_targets(admin_id)
         if not targets:
+            return
+
+        # Check if the bot is stopped for this admin
+        is_working = await _get_cached_working_status(admin_id)
+        if not is_working:
+            logger.debug("Skipping forwarding for admin %s since bot is stopped (/stop).", admin_id)
             return
 
         rules = await _get_cached_filters(admin_id)
@@ -843,6 +884,177 @@ async def _slow_forward(
                 os.remove(media_path)
             except Exception:
                 pass
+
+
+async def _process_and_forward_album(
+    client: TelegramClient, bot, event, admin_id: int
+) -> None:
+    """Core forwarding pipeline for an incoming media group (album)."""
+    try:
+        # Check active status of admin bot
+        is_working = await _get_cached_working_status(admin_id)
+        if not is_working:
+            return
+
+        # Get targets and filters
+        targets = await _get_cached_targets(admin_id)
+        if not targets:
+            return
+
+        rules = await _get_cached_filters(admin_id)
+
+        # 1. Prepare lists of files, captions, and entities
+        files = []
+        captions = []
+        formatting_entities = []
+
+        # Iterate over the messages in the album
+        for msg in event.messages:
+            media = msg.media
+            if not media:
+                continue
+            files.append(media)
+
+            # Process text/caption with filters
+            orig_text = msg.message or ""
+            orig_entities = msg.entities or []
+            
+            # Apply filters
+            filtered_text, filtered_entities = _apply_cached_filters_with_entities(
+                rules, orig_text, orig_entities
+            )
+            
+            # If any item in the album matches a block filter, skip the whole album
+            if filtered_text is None:
+                logger.info("Album blocked by keyword filter for admin %s.", admin_id)
+                return
+
+            captions.append(filtered_text)
+            formatting_entities.append(filtered_entities)
+
+        # Check for APK blocking in any of the album files
+        for msg in event.messages:
+            if msg.file and msg.file.name:
+                if msg.file.name.lower().endswith('.apk'):
+                    if any(r["find_text"] == "<BLOCK_APK>" for r in rules):
+                        logger.info("Album blocked due to APK file filter for admin %s.", admin_id)
+                        return
+
+        logger.info(
+            "⚡ Forwarding album from source (admin %s) → %d target(s) | items=%d",
+            admin_id, len(targets), len(files)
+        )
+
+        # ── Fast path forwarding using userbot ───────────────────────────
+        async def _send_to_target(target_id: int):
+            entity = await _get_target_entity(client, admin_id, target_id)
+            await client.send_file(
+                entity,
+                file=files,
+                caption=captions,
+                formatting_entities=formatting_entities
+            )
+
+        fast_results = await asyncio.gather(
+            *[_send_to_target(t["channel_id"]) for t in targets],
+            return_exceptions=True,
+        )
+
+        # ── Slow path Bot API fallback ───────────────────────────────────
+        failed_ids = []
+        for i, r in enumerate(fast_results):
+            if isinstance(r, Exception):
+                failed_ids.append(targets[i]["channel_id"])
+                logger.warning(
+                    "Album fast-path failed for target %s (admin %s): %s",
+                    targets[i]["channel_id"], admin_id, r,
+                )
+
+        if failed_ids:
+            logger.info("Using Bot API fallback for album to %d target(s) (admin %s)", len(failed_ids), admin_id)
+            await _slow_forward_album(bot, event.messages, captions, formatting_entities, failed_ids, admin_id)
+        else:
+            logger.info("✅ Album forwarded to all %d target(s) via fast-path (admin %s)", len(targets), admin_id)
+
+    except Exception as exc:
+        logger.error("_process_and_forward_album error (admin %s): %s", admin_id, exc, exc_info=True)
+
+
+async def _slow_forward_album(
+    bot,
+    messages,
+    captions: list[str],
+    formatting_entities: list[list],
+    target_ids: list[int],
+    admin_id: int,
+) -> None:
+    """
+    Fallback: download album media locally, then upload via Bot API send_media_group.
+    """
+    from telegram import InputMediaPhoto, InputMediaVideo
+    media_paths = []
+    
+    # 1. Download all files
+    temp_dir = os.path.join(os.getcwd(), "scratch", "temp_media")
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    for msg in messages:
+        if not msg.media:
+            continue
+        try:
+            path = await msg.download_media(file=temp_dir)
+            media_paths.append((msg, path))
+        except Exception as e:
+            logger.error("Media download failed for album item %s (admin %s): %s", msg.id, admin_id, e)
+
+    if not media_paths:
+        return
+
+    # Keep file descriptors open during sending
+    open_files = []
+    try:
+        # 2. Build the list of InputMedia objects
+        media_group = []
+        for i, (msg, path) in enumerate(media_paths):
+            if not path or not os.path.exists(path):
+                continue
+            
+            f = open(path, "rb")
+            open_files.append(f)
+            
+            caption = captions[i] if i < len(captions) and captions[i] else None
+            
+            if msg.photo:
+                media_group.append(InputMediaPhoto(media=f, caption=caption))
+            elif msg.video:
+                media_group.append(InputMediaVideo(media=f, caption=caption))
+            else:
+                media_group.append(InputMediaPhoto(media=f, caption=caption))
+
+        if not media_group:
+            return
+
+        # 3. Send media group to all failed targets
+        for target_id in target_ids:
+            try:
+                for f in open_files:
+                    f.seek(0)
+                await bot.send_media_group(chat_id=target_id, media=media_group)
+            except Exception as exc:
+                logger.error("Bot API send_media_group to %s failed (admin %s): %s", target_id, admin_id, exc)
+
+    finally:
+        for f in open_files:
+            try:
+                f.close()
+            except Exception:
+                pass
+        for _, path in media_paths:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
