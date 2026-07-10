@@ -1081,7 +1081,10 @@ def register(application) -> None:
 
     # /authorize — OTP login
     application.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("authorize", authorize_start)],
+        entry_points=[
+            CommandHandler("authorize", authorize_start),
+            MessageHandler(filters.Regex("^👤 LINK ACCOUNT$"), authorize_start),
+        ],
         states={
             AUTH_PHONE_WAIT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, auth_phone_receive),
@@ -1101,7 +1104,10 @@ def register(application) -> None:
 
     # /addsource
     application.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("addsource", addsource_start)],
+        entry_points=[
+            CommandHandler("addsource", addsource_start),
+            MessageHandler(filters.Regex("^➕ ADD SOURCE$"), addsource_start),
+        ],
         states={
             ADD_SOURCE_WAIT: [
                 MessageHandler(filters.ALL & ~filters.COMMAND, addsource_receive),
@@ -1113,7 +1119,10 @@ def register(application) -> None:
 
     # /addtarget
     application.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("addtarget", addtarget_start)],
+        entry_points=[
+            CommandHandler("addtarget", addtarget_start),
+            MessageHandler(filters.Regex("^➕ ADD TARGET$"), addtarget_start),
+        ],
         states={
             ADD_TARGET_WAIT: [
                 MessageHandler(filters.ALL & ~filters.COMMAND, addtarget_receive),
@@ -1128,7 +1137,10 @@ def register(application) -> None:
         import telegram.warnings
         warnings.simplefilter("ignore", telegram.warnings.PTBUserWarning)
         application.add_handler(ConversationHandler(
-            entry_points=[CommandHandler("filter", filter_start)],
+            entry_points=[
+                CommandHandler("filter", filter_start),
+                MessageHandler(filters.Regex("^🔍 ADD FILTER$"), filter_start),
+            ],
             states={
                 FILTER_TYPE_WAIT: [
                     CallbackQueryHandler(filter_type_callback, pattern=r"^ftype:"),
@@ -1149,7 +1161,10 @@ def register(application) -> None:
         import telegram.warnings
         warnings.simplefilter("ignore", telegram.warnings.PTBUserWarning)
         application.add_handler(ConversationHandler(
-            entry_points=[CommandHandler("schedule", schedule_start)],
+            entry_points=[
+                CommandHandler("schedule", schedule_start),
+                MessageHandler(filters.Regex("^⏰ SCHEDULE MSG$"), schedule_start),
+            ],
             states={
                 SCHED_CONTENT_WAIT: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, sched_content_receive),
@@ -1168,12 +1183,25 @@ def register(application) -> None:
 
     # Standalone commands
     application.add_handler(CommandHandler("removesource", removesource_command))
+    application.add_handler(MessageHandler(filters.Regex("^❌ REMOVE SOURCE$"), removesource_command))
+
     application.add_handler(CommandHandler("removetarget", removetarget_command))
+    application.add_handler(MessageHandler(filters.Regex("^❌ REMOVE TARGET$"), removetarget_command))
+
     application.add_handler(CommandHandler("myfilters", myfilters_command))
+    application.add_handler(MessageHandler(filters.Regex("^📋 MY FILTERS$"), myfilters_command))
+
     application.add_handler(CommandHandler("removeschedule", removeschedule_command))
+    application.add_handler(MessageHandler(filters.Regex("^🗑️ UNSCHEDULE$"), removeschedule_command))
+
     application.add_handler(CommandHandler("mystatus", mystatus_command))
+    application.add_handler(MessageHandler(filters.Regex("^👤 MY STATUS$"), mystatus_command))
+
     application.add_handler(CommandHandler("work", work_command))
+    application.add_handler(MessageHandler(filters.Regex("^▶️ START FORWARD$"), work_command))
+
     application.add_handler(CommandHandler("stop", stop_command))
+    application.add_handler(MessageHandler(filters.Regex("^⏸️ STOP FORWARD$"), stop_command))
 
     # Callback query handlers
     application.add_handler(CallbackQueryHandler(myfilters_callback, pattern=r"^rmfilter:"))

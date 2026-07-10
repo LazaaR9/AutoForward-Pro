@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import CommandHandler, ContextTypes
+from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters
 
 from bot.db import referrals as ref_db
 from bot.db import users as users_db
@@ -160,5 +160,7 @@ async def refer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 def register(application) -> None:
     from telegram.ext import CallbackQueryHandler
     application.add_handler(CommandHandler("refer", refer_command))
+    application.add_handler(MessageHandler(filters.Regex("^🤝 REFER & EARN$"), refer_command))
     application.add_handler(CommandHandler("withdraw", withdraw_command))
+    application.add_handler(MessageHandler(filters.Regex("^💵 WITHDRAW$"), withdraw_command))
     application.add_handler(CallbackQueryHandler(refer_callback, pattern=r"^refer_"))

@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
 
 from bot.config import SUPER_ADMIN_ID, TRIAL_DAYS
@@ -38,6 +38,21 @@ dash_emoji = "<tg-emoji emoji-id='5382261056078881010'>➖</tg-emoji>"
 money_emoji = "<tg-emoji emoji-id='6296202896639791835'>💰</tg-emoji>"
 shield_emoji = "<tg-emoji emoji-id='6269105110450705259'>🛡️</tg-emoji>"
 box_emoji = "<tg-emoji emoji-id='5884479287171485878'>🔲</tg-emoji>"
+
+def _get_admin_keyboard() -> ReplyKeyboardMarkup:
+    keyboard = [
+        [KeyboardButton("➕ ADD SOURCE"), KeyboardButton("➕ ADD TARGET")],
+        [KeyboardButton("❌ REMOVE SOURCE"), KeyboardButton("❌ REMOVE TARGET")],
+        [KeyboardButton("🔍 ADD FILTER"), KeyboardButton("📋 MY FILTERS")],
+        [KeyboardButton("⏰ SCHEDULE MSG"), KeyboardButton("🗑️ UNSCHEDULE")],
+        [KeyboardButton("👤 MY STATUS"), KeyboardButton("💎 PREMIUM PLANS")],
+        [KeyboardButton("🤝 REFER & EARN"), KeyboardButton("💵 WITHDRAW")],
+        [KeyboardButton("▶️ START FORWARD"), KeyboardButton("⏸️ STOP FORWARD")],
+        [KeyboardButton("👤 LINK ACCOUNT"), KeyboardButton("ℹ️ HELP GUIDE")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, persistent=True)
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -88,6 +103,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"━━━━━━━━━━━━━━━\n"
             f"Type /cancel to abort any active conversation.",
             parse_mode="HTML",
+            reply_markup=_get_admin_keyboard(),
         )
         return
 
@@ -109,6 +125,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 f"👉 /authorize — Link your Telegram account\n\n"
                 f"💡 Need help? Send /help",
                 parse_mode="HTML",
+                reply_markup=_get_admin_keyboard(),
             )
             return
 
@@ -140,6 +157,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"━━━━━━━━━━━━━━━\n"
             f"💡 Need help? Send /help",
             parse_mode="HTML",
+            reply_markup=_get_admin_keyboard(),
         )
         return
 

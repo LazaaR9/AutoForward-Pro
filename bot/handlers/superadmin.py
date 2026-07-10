@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import logging
 import warnings
+import asyncio
 from datetime import datetime, timedelta, timezone
 
+from telegram.error import RetryAfter
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -736,42 +738,91 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     for i, user in enumerate(all_users):
         uid = user["user_id"]
+        # Add a tiny delay between messages to respect Telegram limits
+        await asyncio.sleep(0.05)
+        
         try:
             if msg.photo:
                 await context.bot.send_photo(
                     chat_id=uid,
                     photo=msg.photo[-1].file_id,
                     caption=msg.caption,
-                    parse_mode="Markdown" if msg.caption else None,
+                    caption_entities=msg.caption_entities,
                 )
             elif msg.video:
                 await context.bot.send_video(
                     chat_id=uid,
                     video=msg.video.file_id,
                     caption=msg.caption,
-                    parse_mode="Markdown" if msg.caption else None,
+                    caption_entities=msg.caption_entities,
                 )
             elif msg.animation:
                 await context.bot.send_animation(
                     chat_id=uid,
                     animation=msg.animation.file_id,
                     caption=msg.caption,
-                    parse_mode="Markdown" if msg.caption else None,
+                    caption_entities=msg.caption_entities,
                 )
             elif msg.document:
                 await context.bot.send_document(
                     chat_id=uid,
                     document=msg.document.file_id,
                     caption=msg.caption,
-                    parse_mode="Markdown" if msg.caption else None,
+                    caption_entities=msg.caption_entities,
                 )
             else:
                 await context.bot.send_message(
                     chat_id=uid,
                     text=msg.text,
-                    parse_mode="Markdown",
+                    entities=msg.entities,
                 )
             sent += 1
+        except RetryAfter as re_err:
+            logger.warning("Rate limit hit during broadcast. Sleeping for %s seconds", re_err.retry_after)
+            await asyncio.sleep(re_err.retry_after + 1)
+            # Retry sending
+            try:
+                if msg.photo:
+                    await context.bot.send_photo(
+                        chat_id=uid,
+                        photo=msg.photo[-1].file_id,
+                        caption=msg.caption,
+                        caption_entities=msg.caption_entities,
+                    )
+                elif msg.video:
+                    await context.bot.send_video(
+                        chat_id=uid,
+                        video=msg.video.file_id,
+                        caption=msg.caption,
+                        caption_entities=msg.caption_entities,
+                    )
+                elif msg.animation:
+                    await context.bot.send_animation(
+                        chat_id=uid,
+                        animation=msg.animation.file_id,
+                        caption=msg.caption,
+                        caption_entities=msg.caption_entities,
+                    )
+                elif msg.document:
+                    await context.bot.send_document(
+                        chat_id=uid,
+                        document=msg.document.file_id,
+                        caption=msg.caption,
+                        caption_entities=msg.caption_entities,
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=uid,
+                        text=msg.text,
+                        entities=msg.entities,
+                    )
+                sent += 1
+            except Exception as e:
+                err = str(e).lower()
+                if "blocked" in err or "forbidden" in err or "deactivated" in err:
+                    blocked += 1
+                else:
+                    failed += 1
         except Exception as e:
             err = str(e).lower()
             if "blocked" in err or "forbidden" in err or "deactivated" in err:
@@ -792,13 +843,13 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Final summary
     await progress_msg.edit_text(
-        f"✅ *Broadcast Complete!*\n\n"
-        f"📊 *Results:*\n"
-        f"• Total: *{total}*\n"
-        f"• ✅ Sent: *{sent}*\n"
-        f"• 🚫 Blocked/left: *{blocked}*\n"
-        f"• ❌ Failed: *{failed}*",
-        parse_mode="Markdown",
+        f"✅ <b>Broadcast Complete!</b>\n\n"
+        f"📊 <b>Results:</b>\n"
+        f"• Total: <b>{total}</b>\n"
+        f"• ✅ Sent: <b>{sent}</b>\n"
+        f"• 🚫 Blocked/left: <b>{blocked}</b>\n"
+        f"• ❌ Failed: <b>{failed}</b>",
+        parse_mode="HTML",
     )
     return ConversationHandler.END
 

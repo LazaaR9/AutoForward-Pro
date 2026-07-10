@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
-from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 from bot.db.content import get_content
 
 logger = logging.getLogger(__name__)
@@ -179,6 +179,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def register(application) -> None:
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(MessageHandler(filters.Regex("^ℹ️ HELP GUIDE$"), help_command))
     application.add_handler(CommandHandler("howtoauth", howtoauth_command))
     application.add_handler(CommandHandler("howtoaddforwarding", howtoaddforwarding_command))
     application.add_handler(CommandHandler("howtosetfilter", howtosetfilter_command))
