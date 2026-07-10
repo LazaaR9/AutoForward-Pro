@@ -41,14 +41,24 @@ box_emoji = "<tg-emoji emoji-id='5884479287171485878'>🔲</tg-emoji>"
 
 def _get_admin_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
-        [KeyboardButton("➕ ADD SOURCE"), KeyboardButton("➕ ADD TARGET")],
-        [KeyboardButton("❌ REMOVE SOURCE"), KeyboardButton("❌ REMOVE TARGET")],
-        [KeyboardButton("🔍 ADD FILTER"), KeyboardButton("📋 MY FILTERS")],
-        [KeyboardButton("⏰ SCHEDULE MSG"), KeyboardButton("🗑️ UNSCHEDULE")],
-        [KeyboardButton("👤 MY STATUS"), KeyboardButton("💎 PREMIUM PLANS")],
-        [KeyboardButton("🤝 REFER & EARN"), KeyboardButton("💵 WITHDRAW")],
-        [KeyboardButton("▶️ START FORWARD"), KeyboardButton("⏸️ STOP FORWARD")],
-        [KeyboardButton("👤 LINK ACCOUNT"), KeyboardButton("ℹ️ HELP GUIDE")]
+        [KeyboardButton("/start")],
+        [KeyboardButton("/addsource"), KeyboardButton("/addtarget")],
+        [KeyboardButton("/removesource"), KeyboardButton("/removetarget")],
+        [KeyboardButton("/filter"), KeyboardButton("/myfilters")],
+        [KeyboardButton("/schedule"), KeyboardButton("/removeschedule")],
+        [KeyboardButton("/mystatus"), KeyboardButton("/pro")],
+        [KeyboardButton("/refer"), KeyboardButton("/withdraw")],
+        [KeyboardButton("/work"), KeyboardButton("/stop")],
+        [KeyboardButton("/authorize"), KeyboardButton("/help")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=False)
+
+def _get_free_user_keyboard() -> ReplyKeyboardMarkup:
+    keyboard = [
+        [KeyboardButton("/start"), KeyboardButton("/authorize")],
+        [KeyboardButton("/pro")],
+        [KeyboardButton("/refer"), KeyboardButton("/withdraw")],
+        [KeyboardButton("/plan"), KeyboardButton("/help")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=False)
 
@@ -188,9 +198,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     image_path = IMAGES_DIR / "welcome.png"
     if image_path.exists():
         with open(image_path, "rb") as photo:
-            await update.message.reply_photo(photo=photo, caption=text, parse_mode="HTML")
+            await update.message.reply_photo(photo=photo, caption=text, parse_mode="HTML", reply_markup=_get_free_user_keyboard())
     else:
-        await update.message.reply_text(text, parse_mode="HTML")
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=_get_free_user_keyboard())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
