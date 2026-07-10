@@ -25,6 +25,23 @@ from bot.db.transactions import log_transaction
 
 logger = logging.getLogger(__name__)
 
+# Custom Premium Emojis (HTML)
+telegram_emoji = "<tg-emoji emoji-id='6269232713929069503'>💎</tg-emoji>"
+check_emoji = "<tg-emoji emoji-id='5215538285438311443'>✅</tg-emoji>"
+yellow_emoji = "<tg-emoji emoji-id='5978986632315931621'>🟨</tg-emoji>"
+rocket_star = "<tg-emoji emoji-id='5895720492190404869'>🚀</tg-emoji>"
+authorize = "<tg-emoji emoji-id='5852518859268951767'>✅</tg-emoji>"
+check_green = "<tg-emoji emoji-id='5852871561983299073'>👑</tg-emoji>"
+crown_emoji = "<tg-emoji emoji-id='5433758796289685818'>🤖</tg-emoji>"
+bot_emoji = "<tg-emoji emoji-id='5314391089514291948'>🟨</tg-emoji>"
+
+# New Custom Premium Emojis
+dash_emoji = "<tg-emoji emoji-id='5382261056078881010'>➖</tg-emoji>"
+money_emoji = "<tg-emoji emoji-id='6296202896639791835'>💰</tg-emoji>"
+shield_emoji = "<tg-emoji emoji-id='6269105110450705259'>🛡️</tg-emoji>"
+box_emoji = "<tg-emoji emoji-id='5884479287171485878'>🔲</tg-emoji>"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Plan definitions
 # ─────────────────────────────────────────────────────────────────────────────
@@ -179,16 +196,16 @@ def _build_payment_method_keyboard(plan_key: str) -> InlineKeyboardMarkup:
 
 
 _PLANS_TEXT = (
-    "💎 *Premium Membership*\n\n"
-    "Unlock real-time channel forwarding, text filters,\n"
-    "scheduled messages and much more!\n\n"
-    "📋 *Choose your plan:*\n\n"
-    "1️⃣ *1 Month* — ₹88 INR\n"
-    "_(≈ ₹2.9/day • USDT 2)_\n\n"
-    "3️⃣ *3 Months* — ₹250 INR\n"
-    "_(≈ ₹2.7/day • USDT 5)_\n\n"
-    "6️⃣ *6 Months* — ₹500 INR\n"
-    "_(≈ ₹2.7/day • USDT 10)_"
+    f"<b>{telegram_emoji} Premium Membership</b>\n\n"
+    f"Unlock real-time channel forwarding, text filters,\n"
+    f"scheduled messages and much more!\n\n"
+    f"📋 <b>Choose your plan:</b>\n\n"
+    f"1️⃣ <b>1 Month</b> — ₹88 INR\n"
+    f"<i>(≈ ₹2.9/day • USDT 2)</i>\n\n"
+    f"3️⃣ <b>3 Months</b> — ₹250 INR\n"
+    f"<i>(≈ ₹2.7/day • USDT 5)</i>\n\n"
+    f"6️⃣ <b>6 Months</b> — ₹500 INR\n"
+    f"<i>(≈ ₹2.7/day • USDT 10)</i>"
 )
 
 
@@ -210,18 +227,18 @@ async def pro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         plan_name = (user.get("subscription_plan") or "—").replace("_", " ").title()
 
         await update.message.reply_text(
-            f"✅ *You already have an active premium membership!*\n\n"
-            f"📦 Plan: *{plan_name}*\n"
-            f"📅 Expires: `{sub_end.strftime('%d/%m/%Y') if sub_end else 'N/A'}`\n"
-            f"⏳ Days remaining: *{days_left}*\n\n"
+            f"<b>{check_emoji} You already have an active premium membership!</b>\n\n"
+            f"📦 Plan: <b>{plan_name}</b>\n"
+            f"📅 Expires: <code>{sub_end.strftime('%d/%m/%Y') if sub_end else 'N/A'}</code>\n"
+            f"⏳ Days remaining: <b>{days_left}</b>\n\n"
             f"💬 To renew or for any issues, contact {SUPPORT_USERNAME}",
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return
 
     await update.message.reply_text(
         _PLANS_TEXT,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_build_plans_keyboard(),
     )
 
@@ -243,12 +260,12 @@ async def plan_select_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["selected_plan"] = plan_key
 
     await query.edit_message_text(
-        f"💎 *Premium Membership*\n\n"
-        f"📦 Selected plan: *{plan['label']}*\n"
-        f"💰 INR: *₹{plan['inr']}* ({plan['per_day_inr']})\n"
-        f"₮ USDT: *{plan['usdt']} USDT*\n\n"
+        f"<b>{telegram_emoji} Premium Membership</b>\n\n"
+        f"📦 Selected plan: <b>{plan['label']}</b>\n"
+        f"💰 INR: <b>₹{plan['inr']}</b> ({plan['per_day_inr']})\n"
+        f"₮ USDT: <b>{plan['usdt']} USDT</b>\n\n"
         f"Choose payment method:",
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_build_payment_method_keyboard(plan_key),
     )
 
@@ -259,7 +276,7 @@ async def plan_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data.pop("selected_plan", None)
     await query.edit_message_text(
         _PLANS_TEXT,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=_build_plans_keyboard(),
     )
 
@@ -269,9 +286,9 @@ async def plan_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     context.user_data.pop("selected_plan", None)
     await query.edit_message_text(
-        "ℹ️ No problem! Use /pro anytime to view premium plans and upgrade.\n\n"
+        f"{check_emoji} No problem! Use /pro anytime to view premium plans and upgrade.\n\n"
         f"💬 Have questions? Contact {SUPPORT_USERNAME}",
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
 
 
@@ -310,14 +327,14 @@ async def pay_inr_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             [InlineKeyboardButton("⬅️ Back", callback_data=f"plan_select:{plan_key}")],
         ])
         await query.edit_message_text(
-            f"💳 *INR Payment — {plan['label']}*\n\n"
-            f"Amount: *₹{plan['inr']}*\n\n"
-            f"1️⃣ Tap *Pay Now* to complete your payment securely via Razorpay\n"
-            f"2️⃣ Come back here and tap *I've Paid*\n\n"
-            f"✅ Your subscription will be activated *automatically* once payment is confirmed.\n\n"
+            f"{money_emoji} <b>INR Payment — {plan['label']}</b>\n\n"
+            f"Amount: <b>₹{plan['inr']}</b>\n\n"
+            f"{dash_emoji} Tap <b>Pay Now</b> to complete your payment securely via Razorpay\n"
+            f"{dash_emoji} Come back here and tap <b>I've Paid</b>\n\n"
+            f"{check_emoji} Your subscription will be activated <b>automatically</b> once payment is confirmed.\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
             f"💬 Having trouble? Contact {SUPPORT_USERNAME}",
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=keyboard,
         )
     else:
@@ -328,15 +345,15 @@ async def pay_inr_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             [InlineKeyboardButton("⬅️ Back", callback_data=f"plan_select:{plan_key}")],
         ])
         await query.edit_message_text(
-            f"💳 *INR Payment — {plan['label']}*\n\n"
-            f"Amount: *₹{plan['inr']}*\n\n"
-            f"🇮🇳 *How to pay via UPI:*\n"
+            f"{money_emoji} <b>INR Payment — {plan['label']}</b>\n\n"
+            f"Amount: <b>₹{plan['inr']}</b>\n\n"
+            f"🇮🇳 <b>How to pay via UPI:</b>\n"
             f"Contact {SUPPORT_USERNAME} to receive the UPI QR / ID.\n\n"
             f"After completing your payment:\n"
-            f"1️⃣ Send a screenshot to {SUPPORT_USERNAME}\n"
-            f"2️⃣ Tap *I've Paid* below\n\n"
-            f"_Activation within a few minutes after verification._",
-            parse_mode="Markdown",
+            f"{dash_emoji} Send a screenshot to {SUPPORT_USERNAME}\n"
+            f"{dash_emoji} Tap <b>I've Paid</b> below\n\n"
+            f"<i>{shield_emoji} Activation within a few minutes after verification.</i>",
+            parse_mode="HTML",
             reply_markup=keyboard,
         )
 
@@ -372,23 +389,23 @@ async def pay_usdt_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ])
 
     await query.edit_message_text(
-        f"₮ *USDT Payment — {plan['label']}*\n\n"
-        f"Amount: *{plan['usdt']} USDT*\n\n"
+        f"{money_emoji} <b>USDT Payment — {plan['label']}</b>\n\n"
+        f"Amount: <b>{plan['usdt']} USDT</b>\n\n"
         f"Send payment to one of the following addresses:\n\n"
-        f"🔷 *BEP20 (BSC Network):*\n"
-        f"`{USDT_BEP20}`\n\n"
-        f"🔴 *TRC20 (TRON Network):*\n"
-        f"`{USDT_TRC20}`\n\n"
-        f"🟡 *Binance Pay ID:*\n"
-        f"`{BINANCE_ID}`\n\n"
-        f"_Tap any address above to copy it_\n\n"
+        f"🔷 <b>BEP20 (BSC Network):</b>\n"
+        f"<code>{USDT_BEP20}</code>\n\n"
+        f"🔴 <b>TRC20 (TRON Network):</b>\n"
+        f"<code>{USDT_TRC20}</code>\n\n"
+        f"🟡 <b>Binance Pay ID:</b>\n"
+        f"<code>{BINANCE_ID}</code>\n\n"
+        f"<i>Tap any address above to copy it</i>\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📩 *After payment, contact {SUPPORT_USERNAME} with:*\n"
-        f"• Transaction Hash / TxID\n"
-        f"• Plan: *{plan['label']}*\n"
-        f"• Your username: @{username}\n\n"
-        f"_Your membership will be activated after verification_ ⏱",
-        parse_mode="Markdown",
+        f"📩 <b>After payment, contact {SUPPORT_USERNAME} with:</b>\n"
+        f"{dash_emoji} Transaction Hash / TxID\n"
+        f"{dash_emoji} Plan: <b>{plan['label']}</b>\n"
+        f"{dash_emoji} Your username: @{username}\n\n"
+        f"<i>{shield_emoji} Your membership will be activated after verification</i> ⏱",
+        parse_mode="HTML",
         reply_markup=keyboard,
     )
 
@@ -439,15 +456,15 @@ async def paid_check_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 subs_db.activate_subscription(pending["id"], expires_at)
 
             await query.edit_message_text(
-                f"🎉 *Payment Successful!*\n\n"
+                f"🎉 <b>Payment Successful!</b>\n\n"
                 f"Your premium membership has been activated.\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━\n"
-                f"📦 Plan: *{plan['label']}*\n"
-                f"📅 Expires: `{expires_at.strftime('%d/%m/%Y')}`\n"
+                f"📦 Plan: <b>{plan['label']}</b>\n"
+                f"📅 Expires: <code>{expires_at.strftime('%d/%m/%Y')}</code>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"Use /start to see all your admin commands.\n\n"
-                f"Thank you for your support ❤️",
-                parse_mode="Markdown",
+                f"{check_emoji} Use /start to see all your admin commands.\n\n"
+                f"Thank you for your support {telegram_emoji}",
+                parse_mode="HTML",
             )
             logger.info("Auto-activated user %s on plan %s via Razorpay.", user_id, plan_key)
             return
@@ -459,17 +476,17 @@ async def paid_check_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 [InlineKeyboardButton(f"💬 Help — Contact {SUPPORT_USERNAME}", url="https://t.me/savvyop")],
             ])
             await query.edit_message_text(
-                f"❌ *Payment Not Confirmed*\n\n"
+                f"❌ <b>Payment Not Confirmed</b>\n\n"
                 f"We could not find a completed payment for your account.\n\n"
-                f"*Possible reasons:*\n"
-                f"• Payment is still processing (wait 1–2 min and try again)\n"
-                f"• Payment was not completed\n"
-                f"• You paid from a different session\n\n"
+                f"<b>Possible reasons:</b>\n"
+                f"{dash_emoji} Payment is still processing (wait 1–2 min and try again)\n"
+                f"{dash_emoji} Payment was not completed\n"
+                f"{dash_emoji} You paid from a different session\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━\n"
                 f"If you've already paid and still see this message,\n"
                 f"please contact {SUPPORT_USERNAME} with your payment screenshot.\n"
                 f"We'll activate your account manually. 🙏",
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 reply_markup=keyboard,
             )
             return
@@ -487,11 +504,11 @@ async def paid_check_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             sub_end = sub_end.replace(tzinfo=timezone.utc)
 
         await query.edit_message_text(
-            f"✅ *You are already subscribed!*\n\n"
-            f"📦 Plan: *{plan['label']}*\n"
-            f"📅 Expires: `{sub_end.strftime('%d/%m/%Y') if sub_end else 'N/A'}`\n\n"
+            f"<b>{check_emoji} You are already subscribed!</b>\n\n"
+            f"📦 Plan: <b>{plan['label']}</b>\n"
+            f"📅 Expires: <code>{sub_end.strftime('%d/%m/%Y') if sub_end else 'N/A'}</code>\n\n"
             f"Use /start to see all your commands.",
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return
 
@@ -500,16 +517,16 @@ async def paid_check_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         [InlineKeyboardButton(f"💬 Contact {SUPPORT_USERNAME}", url="https://t.me/savvyop")],
     ])
     await query.edit_message_text(
-        f"📨 *Payment Notification Sent!*\n\n"
-        f"📦 Plan: *{plan['label']}*\n"
-        f"💰 Amount: *₹{plan['inr']} INR*\n\n"
+        f"📨 <b>Payment Notification Sent!</b>\n\n"
+        f"📦 Plan: <b>{plan['label']}</b>\n"
+        f"💰 Amount: <b>₹{plan['inr']} INR</b>\n\n"
         f"The admin has been notified and will activate your account shortly.\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━\n"
-        f"⏳ *Please wait* — activation usually takes a few minutes.\n\n"
+        f"⏳ <b>Please wait</b> — activation usually takes a few minutes.\n\n"
         f"💬 Having trouble? Contact {SUPPORT_USERNAME}\n"
-        f"_Send your payment screenshot for faster verification._\n\n"
-        f"Thank you for your support ❤️",
-        parse_mode="Markdown",
+        f"<i>Send your payment screenshot for faster verification.</i>\n\n"
+        f"Thank you for your support {telegram_emoji}",
+        parse_mode="HTML",
         reply_markup=keyboard,
     )
 
@@ -518,14 +535,14 @@ async def paid_check_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await context.bot.send_message(
             chat_id=SUPER_ADMIN_ID,
             text=(
-                f"🔔 *New INR Payment — Manual Verification Needed*\n\n"
-                f"👤 User: @{username} (`{user_id}`)\n"
-                f"📦 Plan: *{plan['label']}*\n"
-                f"💰 Amount: *₹{plan['inr']}*\n\n"
+                f"🔔 <b>New INR Payment — Manual Verification Needed</b>\n\n"
+                f"👤 User: @{username} (<code>{user_id}</code>)\n"
+                f"📦 Plan: <b>{plan['label']}</b>\n"
+                f"💰 Amount: <b>₹{plan['inr']}</b>\n\n"
                 f"After verifying payment, run:\n"
-                f"`/grant_premium {user_id} {plan['days']}`"
+                f"<code>/grant_premium {user_id} {plan['days']}</code>"
             ),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
     except Exception as exc:
         logger.warning("Could not notify super admin: %s", exc)

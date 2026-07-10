@@ -24,9 +24,15 @@ _PHOTO_CACHE = {}
 HSHAKE = '<tg-emoji emoji-id="5456371000239212004">🤝</tg-emoji>'
 HEART = '<tg-emoji emoji-id="5285439518130857782">❤️</tg-emoji>'
 THUMB = '<tg-emoji emoji-id="5413482938585063042">👍</tg-emoji>'
-DIAMOND = '<tg-emoji emoji-id="5796205953913196373">💎</tg-emoji>'
-CHECK = '<tg-emoji emoji-id="5217497254381754877">✅</tg-emoji>'
+DIAMOND = '<tg-emoji emoji-id="6269232713929069503">💎</tg-emoji>'
+CHECK = '<tg-emoji emoji-id="5215538285438311443">✅</tg-emoji>'
 ARROW = '<tg-emoji emoji-id="5215720576735255650">➡️</tg-emoji>'
+YELLOW_SQUARE = '<tg-emoji emoji-id="5978986632315931621">🟨</tg-emoji>'
+ROCKET = '<tg-emoji emoji-id="5895720492190404869">🚀</tg-emoji>'
+AUTHORIZE = '<tg-emoji emoji-id="5852518859268951767">✅</tg-emoji>'
+CROWN = '<tg-emoji emoji-id="5852871561983299073">👑</tg-emoji>'
+ROBOT = '<tg-emoji emoji-id="5433758796289685818">🤖</tg-emoji>'
+BULLET = '<tg-emoji emoji-id="5314391089514291948">🟨</tg-emoji>'
 
 def get_help_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
@@ -34,7 +40,7 @@ def get_help_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("Set Forwarding", callback_data="help_cmd:/howtoaddforwarding", icon_custom_emoji_id="5215720576735255650", style="primary")],
         [InlineKeyboardButton("Set Filters", callback_data="help_cmd:/howtosetfilter", icon_custom_emoji_id="5215720576735255650", style="primary")],
         [InlineKeyboardButton("Schedule Messages", callback_data="help_cmd:/howtoschedule", icon_custom_emoji_id="5215720576735255650", style="primary")],
-        [InlineKeyboardButton("Premium Info", callback_data="help_cmd:/howtopro", icon_custom_emoji_id="5796205953913196373", style="success")],
+        [InlineKeyboardButton("Premium Info", callback_data="help_cmd:/howtopro", icon_custom_emoji_id="6269232713929069503", style="success")],
     ])
 
 async def _send_help_screen(update: Update, image_name: str, text: str) -> None:
@@ -82,11 +88,11 @@ async def _send_help_screen(update: Update, image_name: str, text: str) -> None:
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     default_text = (
-        f"<b>Help & Tutorials</b>\n\n"
+        f"<b>{ROBOT} Help & Tutorials</b>\n\n"
         f"<b>Quick Start Guide:</b>\n"
-        f"1. /authorize — Link your account\n"
-        f"2. /addsource — Pick channel to copy from\n"
-        f"3. /addtarget — Pick where messages go\n\n"
+        f"{BULLET} 1. /authorize — Link your account\n"
+        f"{BULLET} 2. /addsource — Pick channel to copy from\n"
+        f"{BULLET} 3. /addtarget — Pick where messages go\n\n"
         f"Click the buttons below to see detailed tutorials {ARROW}"
     )
     text = get_content("help_msg", default_text)
@@ -95,11 +101,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def howtoauth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     default_text = (
         f"<b>How to Link Your Account</b>\n\n"
-        f"{ARROW} Send the /authorize command.\n"
-        f"{ARROW} Reply with your Telegram Phone Number (include country code, e.g. +91...).\n"
-        f"{ARROW} Telegram will send you a 5-digit login code in your official Telegram app.\n"
-        f"{ARROW} <b>IMPORTANT:</b> Send the code with a hyphen (e.g., <code>12-345</code>) to bypass Telegram's anti-bot security!\n"
-        f"{ARROW} If you have 2-Step Verification enabled, it will ask for your password.\n\n"
+        f"{BULLET} Send the /authorize command.\n"
+        f"{BULLET} Reply with your Telegram Phone Number (include country code, e.g. +91...).\n"
+        f"{BULLET} Telegram will send you a 5-digit login code in your official Telegram app.\n"
+        f"{BULLET} <b>IMPORTANT:</b> Send the code with a hyphen (e.g., <code>12-345</code>) to bypass Telegram's anti-bot security!\n"
+        f"{BULLET} If you have 2-Step Verification enabled, it will ask for your password.\n\n"
         f"{CHECK} Once done, your account is linked and ready to forward!"
     )
     text = get_content("howtoauth", default_text)
@@ -108,9 +114,9 @@ async def howtoauth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def howtoaddforwarding_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     default_text = (
         f"<b>How to Set Up Forwarding</b>\n\n"
-        f"{ARROW} Send the /addsource command and provide the channel username or ID from where you want to copy messages.\n"
-        f"{ARROW} Send the /addtarget command and provide the channel username or ID to where you want the messages forwarded.\n"
-        f"{ARROW} You can add multiple targets by repeating /addtarget.\n\n"
+        f"{BULLET} Send the /addsource command and provide the channel username or ID from where you want to copy messages.\n"
+        f"{BULLET} Send the /addtarget command and provide the channel username or ID to where you want the messages forwarded.\n"
+        f"{BULLET} You can add multiple targets by repeating /addtarget.\n\n"
         f"{CHECK} The bot will now instantly copy any new message from your Source to all your Targets!"
     )
     text = get_content("howtoaddforwarding", default_text)
@@ -120,10 +126,10 @@ async def howtosetfilter_command(update: Update, context: ContextTypes.DEFAULT_T
     default_text = (
         f"<b>How to Set Filters</b>\n\n"
         f"Use /filter to change text or block messages entirely.\n\n"
-        f"{ARROW} <b>Replace Links:</b> Choose 'Replace Any Link', provide your new link. Every link in the source message will become your link.\n"
-        f"{ARROW} <b>Replace Usernames:</b> Choose 'Replace Any Username', provide your username (e.g., <code>@MyChannel</code>). All usernames will be replaced.\n"
-        f"{ARROW} <b>Replace Specific Text:</b> Choose 'Replace Custom Text', provide the exact text to find, then the text to replace it with.\n"
-        f"{ARROW} <b>Block Words:</b> Choose 'Block Message if Contains', provide a word. If the source message has this word, it will <b>not</b> be forwarded.\n\n"
+        f"{BULLET} <b>Replace Links:</b> Choose 'Replace Any Link', provide your new link. Every link in the source message will become your link.\n"
+        f"{BULLET} <b>Replace Usernames:</b> Choose 'Replace Any Username', provide your username (e.g., <code>@MyChannel</code>). All usernames will be replaced.\n"
+        f"{BULLET} <b>Replace Specific Text:</b> Choose 'Replace Custom Text', provide the exact text to find, then the text to replace it with.\n"
+        f"{BULLET} <b>Block Words:</b> Choose 'Block Message if Contains', provide a word. If the source message has this word, it will <b>not</b> be forwarded.\n\n"
         f"{THUMB} Use /myfilters to see or delete your active rules."
     )
     text = get_content("howtosetfilter", default_text)
@@ -132,10 +138,10 @@ async def howtosetfilter_command(update: Update, context: ContextTypes.DEFAULT_T
 async def howtoschedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     default_text = (
         f"<b>How to Schedule Messages</b>\n\n"
-        f"{ARROW} Send /schedule.\n"
-        f"{ARROW} The bot will ask for the message content. Send text, links, or media.\n"
-        f"{ARROW} It will ask for the Time. You can use formats like <code>14:30</code>, <code>02:30 PM</code>, or even <code>02:30 PM IND</code> to use Indian time!\n"
-        f"{ARROW} Choose if it should repeat 'Daily' or just run 'One-time'.\n\n"
+        f"{BULLET} Send /schedule.\n"
+        f"{BULLET} The bot will ask for the message content. Send text, links, or media.\n"
+        f"{BULLET} It will ask for the Time. You can use formats like <code>14:30</code>, <code>02:30 PM</code>, or even <code>02:30 PM IND</code> to use Indian time!\n"
+        f"{BULLET} Choose if it should repeat 'Daily' or just run 'One-time'.\n\n"
         f"{CHECK} Use /removeschedule to cancel scheduled messages."
     )
     text = get_content("howtoschedule", default_text)
@@ -145,9 +151,9 @@ async def howtopro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     default_text = (
         f"<b>How to Get Premium</b>\n\n"
         f"{DIAMOND} Send /pro at any time to view the plans.\n"
-        f"{ARROW} Select your preferred plan (1 Month, 3 Months, or 6 Months).\n"
-        f"{ARROW} Choose your payment method (INR via UPI/Razorpay or USDT Crypto).\n"
-        f"{ARROW} Complete the payment using the provided links or addresses.\n"
+        f"{BULLET} Select your preferred plan (1 Month, 3 Months, or 6 Months).\n"
+        f"{BULLET} Choose your payment method (INR via UPI/Razorpay or USDT Crypto).\n"
+        f"{BULLET} Complete the payment using the provided links or addresses.\n"
         f"{CHECK} Click \"I've Paid\" and contact support with your screenshot if required.\n\n"
         f"{HSHAKE} Premium unlocks all advanced features {HEART}"
     )

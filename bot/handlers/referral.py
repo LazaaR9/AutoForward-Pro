@@ -17,6 +17,16 @@ from bot.config import SUPER_ADMIN_ID
 
 logger = logging.getLogger(__name__)
 
+# Custom Premium Emojis (HTML)
+telegram_emoji = "<tg-emoji emoji-id='5798505243180273024'>💎</tg-emoji>"
+check_emoji = "<tg-emoji emoji-id='5215538285438311443'>✅</tg-emoji>"
+yellow_emoji = "<tg-emoji emoji-id='5978986632315931621'>🟨</tg-emoji>"
+rocket_star = "<tg-emoji emoji-id='5895720492190404869'>🚀</tg-emoji>"
+authorize = "<tg-emoji emoji-id='5852518859268951767'>✅</tg-emoji>"
+check_green = "<tg-emoji emoji-id='5852871561983299073'>👑</tg-emoji>"
+crown_emoji = "<tg-emoji emoji-id='5433758796289685818'>🤖</tg-emoji>"
+bot_emoji = "<tg-emoji emoji-id='5314391089514291948'>🟨</tg-emoji>"
+
 BOT_USERNAME = "Auto_Forwarder_Official_Bot"
 OWNER_USERNAME = "Savvyop"
 
@@ -43,32 +53,32 @@ async def refer_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Withdrawal status
     if earned >= min_withdrawal:
         withdrawal_status = (
-            f"✅ *Withdrawal Available!*\n"
-            f"You have *₹{earned:.2f}* ready to withdraw.\n"
+            f"{check_emoji} <b>Withdrawal Available!</b>\n"
+            f"You have <b>₹{earned:.2f}</b> ready to withdraw.\n"
             f"👉 Contact @{OWNER_USERNAME} with your UPI ID to get paid!"
         )
     else:
         remaining = min_withdrawal - earned
         withdrawal_status = (
-            f"⏳ *₹{remaining:.0f} more* to reach the minimum withdrawal of ₹{min_withdrawal:.0f}\n"
+            f"⏳ <b>₹{remaining:.0f} more</b> to reach the minimum withdrawal of ₹{min_withdrawal:.0f}\n"
             f"Use /withdraw to learn how to cash out."
         )
 
     text = (
-        f"🤝 *Refer & Earn*\n\n"
-        f"Earn *₹{payout:.0f}* for every friend who buys a Pro plan!\n\n"
+        f"🤝 <b>Refer & Earn</b>\n\n"
+        f"Earn <b>₹{payout:.0f}</b> for every friend who buys a Pro plan!\n\n"
         f"━━━━━━━━━━━━━━━\n"
-        f"📊 *Your Stats*\n"
-        f"👥 Total Referrals: *{total}*\n"
-        f"⭐ Pro Conversions: *{pro}*\n"
-        f"💰 Total Earned: *₹{earned:.2f}*\n"
+        f"📊 <b>Your Stats</b>\n"
+        f"👥 Total Referrals: <b>{total}</b>\n"
+        f"⭐ Pro Conversions: <b>{pro}</b>\n"
+        f"💰 Total Earned: <b>₹{earned:.2f}</b>\n"
         f"━━━━━━━━━━━━━━━\n\n"
-        f"🔗 *Your Referral Link:*\n"
-        f"`{ref_link}`\n\n"
+        f"🔗 <b>Your Referral Link:</b>\n"
+        f"<code>{ref_link}</code>\n\n"
         f"📤 Share this link. When a friend buys Pro, you earn ₹{payout:.0f}!\n\n"
-        f"💳 *Withdrawal:*\n"
+        f"💳 <b>Withdrawal:</b>\n"
         f"{withdrawal_status}\n\n"
-        f"📌 Minimum withdrawal: *₹{min_withdrawal:.0f}* via UPI"
+        f"📌 Minimum withdrawal: <b>₹{min_withdrawal:.0f}</b> via UPI"
     )
 
     keyboard = InlineKeyboardMarkup([
@@ -79,7 +89,7 @@ async def refer_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         [InlineKeyboardButton("💸 How to Withdraw?", callback_data="refer_withdraw_info")],
     ])
 
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -96,23 +106,23 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     earned = stats["total_earned"]
 
     if earned >= min_withdrawal:
-        status_line = f"✅ *You are eligible to withdraw ₹{earned:.2f}!*"
+        status_line = f"{check_emoji} <b>You are eligible to withdraw ₹{earned:.2f}!</b>"
     else:
         remaining = min_withdrawal - earned
-        status_line = f"⏳ You need *₹{remaining:.0f} more* to reach the minimum (₹{min_withdrawal:.0f})"
+        status_line = f"⏳ You need <b>₹{remaining:.0f} more</b> to reach the minimum (₹{min_withdrawal:.0f})"
 
     text = (
-        f"💸 *Withdraw Your Earnings*\n\n"
+        f"💸 <b>Withdraw Your Earnings</b>\n\n"
         f"{status_line}\n\n"
         f"━━━━━━━━━━━━━━━\n"
-        f"📋 *How to Withdraw:*\n\n"
-        f"1️⃣ Make sure your balance is ₹{min_withdrawal:.0f} or more\n"
-        f"2️⃣ Contact *@{OWNER_USERNAME}* on Telegram\n"
-        f"3️⃣ Send your *UPI ID* and *User ID* (`{user_id}`)\n"
-        f"4️⃣ Payment will be sent within *24 hours* ✅\n\n"
+        f"📋 <b>How to Withdraw:</b>\n\n"
+        f"{bot_emoji} 1️⃣ Make sure your balance is ₹{min_withdrawal:.0f} or more\n"
+        f"{bot_emoji} 2️⃣ Contact <b>@{OWNER_USERNAME}</b> on Telegram\n"
+        f"{bot_emoji} 3️⃣ Send your <b>UPI ID</b> and <b>User ID</b> (<code>{user_id}</code>)\n"
+        f"{bot_emoji} 4️⃣ Payment will be sent within <b>24 hours</b> {check_emoji}\n\n"
         f"━━━━━━━━━━━━━━━\n"
-        f"💰 Your current balance: *₹{earned:.2f}*\n"
-        f"📌 Minimum withdrawal: *₹{min_withdrawal:.0f}*\n\n"
+        f"💰 Your current balance: <b>₹{earned:.2f}</b>\n"
+        f"📌 Minimum withdrawal: <b>₹{min_withdrawal:.0f}</b>\n\n"
         f"📣 Keep referring to earn more! Use /refer to get your link."
     )
 
@@ -121,7 +131,7 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         [InlineKeyboardButton("🔗 My Referral Link", callback_data="refer_show_link")],
     ])
 
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -138,8 +148,8 @@ async def refer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         user_id = query.from_user.id
         ref_link = f"https://t.me/{BOT_USERNAME}?start=ref_{user_id}"
         await query.message.reply_text(
-            f"🔗 *Your Referral Link:*\n`{ref_link}`",
-            parse_mode="Markdown",
+            f"🔗 <b>Your Referral Link:</b>\n<code>{ref_link}</code>",
+            parse_mode="HTML",
         )
 
 
