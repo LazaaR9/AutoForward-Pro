@@ -50,7 +50,7 @@ def _get_admin_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton("▶️ START FORWARD"), KeyboardButton("⏸️ STOP FORWARD")],
         [KeyboardButton("👤 LINK ACCOUNT"), KeyboardButton("ℹ️ HELP GUIDE")]
     ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, persistent=True)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=False)
 
 
 
@@ -90,7 +90,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"/admin_subscriptions — View subscriptions\n"
             f"/grant_premium — Grant premium access\n"
             f"/revoke_premium — Revoke premium access\n\n"
-            f"💰 <b>Payments & Income</b>\n"
+            f"<b>Payments & Income</b>\n"
             f"/addincome — Log a manual payment\n"
             f"/stats — View system statistics\n\n"
             f"📢 <b>Broadcast & Content</b>\n"
