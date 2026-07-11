@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
 from bot.config import SUPER_ADMIN_ID, TRIAL_DAYS
 from bot.db import users as users_db
@@ -41,24 +41,24 @@ box_emoji = "<tg-emoji emoji-id='5884479287171485878'>🔲</tg-emoji>"
 
 def _get_admin_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
-        [KeyboardButton("/start")],
-        [KeyboardButton("/addsource"), KeyboardButton("/addtarget")],
-        [KeyboardButton("/removesource"), KeyboardButton("/removetarget")],
-        [KeyboardButton("/filter"), KeyboardButton("/myfilters")],
-        [KeyboardButton("/schedule"), KeyboardButton("/removeschedule")],
-        [KeyboardButton("/mystatus"), KeyboardButton("/pro")],
-        [KeyboardButton("/refer"), KeyboardButton("/withdraw")],
-        [KeyboardButton("/work"), KeyboardButton("/stop")],
-        [KeyboardButton("/authorize"), KeyboardButton("/help")]
+        [KeyboardButton("🏠 START")],
+        [KeyboardButton("📥 ADD SOURCE"), KeyboardButton("📤 ADD TARGET")],
+        [KeyboardButton("❌ REMOVE SOURCE"), KeyboardButton("❌ REMOVE TARGET")],
+        [KeyboardButton("🔍 FILTER"), KeyboardButton("📋 MY FILTERS")],
+        [KeyboardButton("⏰ SCHEDULE"), KeyboardButton("🗑️ REMOVE SCHEDULE")],
+        [KeyboardButton("📊 MY STATUS"), KeyboardButton("💎 PRO")],
+        [KeyboardButton("🤝 REFER"), KeyboardButton("💰 WITHDRAW")],
+        [KeyboardButton("📡 WORK"), KeyboardButton("🛑 STOP")],
+        [KeyboardButton("🔐 AUTHORIZE"), KeyboardButton("💡 HELP")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=False)
 
 def _get_free_user_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
-        [KeyboardButton("/start"), KeyboardButton("/authorize")],
-        [KeyboardButton("/pro")],
-        [KeyboardButton("/refer"), KeyboardButton("/withdraw")],
-        [KeyboardButton("/plan"), KeyboardButton("/help")]
+        [KeyboardButton("🏠 START")],
+        [KeyboardButton("🔐 AUTHORIZE")], [KeyboardButton("💎 PRO")],
+        [KeyboardButton("🤝 REFER"), KeyboardButton("💰 WITHDRAW")],
+        [KeyboardButton("📋 PLAN"), KeyboardButton("💡 HELP")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=False)
 
@@ -278,6 +278,38 @@ def _get_superadmin_username() -> str:
 
 def register(application) -> None:
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(MessageHandler(filters.Regex("^🏠 START$"), start_command))
     application.add_handler(CommandHandler("plan", plan_command))
+    application.add_handler(MessageHandler(filters.Regex("^📋 PLAN$"), plan_command))
     # /pro is now registered in bot/handlers/payment.py
+
+
+async def fallback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Catch-all handler for unauthorized users or unrecognized messages/commands."""
+    # Only handle text messages sent by users
+    if not update.message or not update.message.text:
+        return
+
+    # Check if the chat is a private chat (don't reply to group messages)
+    if update.effective_chat.type != "private":
+        return
+
+    user_id = update.effective_user.id
+    # Check if userbot is authorized
+    if not userbot_manager.is_userbot_authorized(user_id):
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔐 Login Now", callback_data="auth_login")]
+        ])
+        await update.message.reply_text(
+            "<b>Best Auto Forwarding Bot</b>\n"
+            "❌ You Are Not Logged In.\n\n"
+            "Please Login to Use Bot 👇",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+
+
+def register_fallback(application) -> None:
+    application.add_handler(MessageHandler(filters.TEXT | filters.COMMAND, fallback_handler))
+
 

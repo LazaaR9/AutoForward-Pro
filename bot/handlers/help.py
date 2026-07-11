@@ -179,6 +179,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def register(application) -> None:
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(MessageHandler(filters.Regex("^💡 HELP$"), help_command))
     application.add_handler(CommandHandler("howtoauth", howtoauth_command))
     application.add_handler(CommandHandler("howtoaddforwarding", howtoaddforwarding_command))
     application.add_handler(CommandHandler("howtosetfilter", howtosetfilter_command))

@@ -554,6 +554,7 @@ async def paid_check_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 def register(application) -> None:
     application.add_handler(CommandHandler("pro", pro_command))
+    application.add_handler(MessageHandler(filters.Regex("^💎 PRO$"), pro_command))
     application.add_handler(CallbackQueryHandler(plan_select_callback, pattern=r"^plan_select:"))
     application.add_handler(CallbackQueryHandler(plan_back_callback, pattern=r"^plan_back$"))
     application.add_handler(CallbackQueryHandler(plan_cancel_callback, pattern=r"^plan_cancel$"))

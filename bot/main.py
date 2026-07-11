@@ -160,6 +160,9 @@ def build_application() -> Application:
     help.register(app)
     referral.register(app)
 
+    # 4.6. Fallback handler for unregistered commands/messages
+    user.register_fallback(app)
+
     # 5. Forwarding (group=1 — lower priority, channel posts only)
     forwarding.register(app)
 

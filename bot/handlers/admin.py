@@ -179,8 +179,11 @@ async def authorize_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await _clear_other_conversations(update, context, "authorize")
     admin_id = update.effective_user.id
 
+    if update.callback_query:
+        await update.callback_query.answer()
+
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             "❌ *Bot Not Configured*\n\n"
             "`TELEGRAM_API_ID` and `TELEGRAM_API_HASH` are missing from the server `.env` file.\n"
             "Please ask the Super Admin to add them.",
@@ -189,7 +192,7 @@ async def authorize_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return ConversationHandler.END
 
     if userbot_manager.is_userbot_authorized(admin_id):
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             "✅ *Already Authorized!*\n\n"
             "Your Telegram account is already linked and actively monitoring your source channel.\n\n"
             "Use /addsource to set a source channel or /addtarget to add target channels.",
@@ -197,7 +200,7 @@ async def authorize_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return ConversationHandler.END
 
-    await update.message.reply_text(
+    await update.effective_message.reply_text(
         "🔐 *Link Your Telegram Account*\n\n"
         "To monitor private and public channels, I need to link your personal Telegram account.\n\n"
         "📱 *Step 1 of 2:* Send your phone number in international format:\n"
@@ -402,13 +405,91 @@ async def auth_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def _check_authorized(update: Update, admin_id: int) -> bool:
     """Reply with prompt and return False if userbot not authorized."""
     if not userbot_manager.is_userbot_authorized(admin_id):
-        await update.message.reply_text(
-            "🔑 *Authorization Required*\n\n"
-            "Run /authorize first to link your Telegram account before using this feature.",
-            parse_mode="Markdown",
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔐 Login Now", callback_data="auth_login")]
+        ])
+        await update.effective_message.reply_text(
+            "<b>Best Auto Forwarding Bot</b>\n"
+            "❌ You Are Not Logged In.\n\n"
+            "Please Login to Use Bot 👇",
+            parse_mode="HTML",
+            reply_markup=keyboard,
         )
         return False
     return True
+
+
+async def _get_dialogs_keyboard_and_text(admin_id: int, bot, prefix: str) -> tuple[str, InlineKeyboardMarkup, list[dict]] | None:
+    client = await userbot_manager.start_userbot(admin_id, bot)
+    if not client:
+        return None
+
+    try:
+        dialogs = await client.get_dialogs(limit=80)
+    except Exception as e:
+        logger.error("Error fetching dialogs for %s: %s", admin_id, e)
+        return None
+
+    temp_dialogs = []
+    text_lines = []
+    
+    for d in dialogs:
+        name = d.name or "Unnamed Chat"
+        username = getattr(d.entity, "username", None)
+        if d.is_user and d.entity.bot and d.entity.id == bot.id:
+            continue
+            
+        temp_dialogs.append({
+            "id": d.id,
+            "name": name,
+            "username": username
+        })
+        
+        num = len(temp_dialogs)
+        text_lines.append(f"{num}. {name}")
+
+    if not temp_dialogs:
+        return "📭 No channels, groups, or chats found in your account.", InlineKeyboardMarkup([]), []
+
+    header = "✉️ *Select the Number Below to Set Your Source*" if prefix == "srcsel" else "✉️ *Select the Number Below to Set Your Target*"
+    message_text = f"{header}\n──────────────────────────\n" + "\n".join(text_lines)
+    
+    if len(message_text) > 4000:
+        truncated_lines = []
+        truncated_dialogs = []
+        current_len = len(header) + 30
+        for i, line in enumerate(text_lines):
+            line_len = len(line) + 1
+            if current_len + line_len > 4000:
+                break
+            truncated_lines.append(line)
+            truncated_dialogs.append(temp_dialogs[i])
+            current_len += line_len
+        temp_dialogs = truncated_dialogs
+        message_text = f"{header}\n──────────────────────────\n" + "\n".join(truncated_lines)
+
+    keyboard = []
+    row = []
+    for i in range(len(temp_dialogs)):
+        num = i + 1
+        row.append(InlineKeyboardButton(str(num), callback_data=f"{prefix}:{i}"))
+        if len(row) == 5:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+        
+    keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_action")])
+
+    return message_text, InlineKeyboardMarkup(keyboard), temp_dialogs
+
+
+async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data.clear()
+    await query.edit_message_text("❌ Operation cancelled.")
+    return ConversationHandler.END
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -422,25 +503,39 @@ async def addsource_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not await _check_authorized(update, admin_id):
         return ConversationHandler.END
 
-    existing = channels_db.get_source_channel(admin_id)
-    existing_note = ""
-    if existing:
-        display = f"@{existing['channel_username']}" if existing.get("channel_username") else str(existing["channel_id"])
-        existing_note = f"\n\n📌 Current source: `{display}` _(will be replaced)_"
+    loading_msg = await update.message.reply_text("🔄 Fetching your channels/groups/chats...")
 
-    await update.message.reply_text(
-        "📡 *Set Source Channel*\n\n"
-        "Send the source channel as:\n"
-        "• `@username` or `https://t.me/username`\n"
-        "• Numeric ID: `-1001234567890`\n"
-        "• Or *forward any message* from the channel\n\n"
-        "✅ Works for both *public* and *private* channels "
-        "(your linked account must be a member of private ones)."
-        f"{existing_note}\n\n"
-        "Type /cancel to abort.\n\n"
-        "💡 *Need a tutorial?* Send /help",
-        parse_mode="Markdown",
-    )
+    res = await _get_dialogs_keyboard_and_text(admin_id, context.bot, "srcsel")
+    if res:
+        msg_text, reply_markup, temp_dialogs = res
+        context.user_data["temp_dialogs"] = temp_dialogs
+        await loading_msg.delete()
+        await update.message.reply_text(
+            msg_text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown",
+        )
+    else:
+        await loading_msg.delete()
+        existing = channels_db.get_source_channel(admin_id)
+        existing_note = ""
+        if existing:
+            display = f"@{existing['channel_username']}" if existing.get("channel_username") else str(existing["channel_id"])
+            existing_note = f"\n\n📌 Current source: `{display}` _(will be replaced)_"
+
+        await update.message.reply_text(
+            "📡 *Set Source Channel*\n\n"
+            "Send the source channel as:\n"
+            "• `@username` or `https://t.me/username`\n"
+            "• Numeric ID: `-1001234567890`\n"
+            "• Or *forward any message* from the channel\n\n"
+            "✅ Works for both *public* and *private* channels "
+            "(your linked account must be a member of private ones)."
+            f"{existing_note}\n\n"
+            "Type /cancel to abort.\n\n"
+            "💡 *Need a tutorial?* Send /help",
+            parse_mode="Markdown",
+        )
     return ADD_SOURCE_WAIT
 
 
@@ -500,6 +595,42 @@ async def addsource_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ConversationHandler.END
 
 
+async def addsource_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    admin_id = query.from_user.id
+
+    try:
+        idx_str = query.data.split(":")[1]
+        idx = int(idx_str)
+    except (IndexError, ValueError):
+        await query.edit_message_text("❌ Invalid selection. Please start again with /addsource.")
+        return ConversationHandler.END
+
+    temp_dialogs = context.user_data.get("temp_dialogs")
+    if not temp_dialogs or idx < 0 or idx >= len(temp_dialogs):
+        await query.edit_message_text("❌ Session expired or invalid selection. Please try again with /addsource.")
+        return ConversationHandler.END
+
+    selected = temp_dialogs[idx]
+    channel_id = selected["id"]
+    username = selected["username"]
+
+    channels_db.set_source_channel(admin_id, channel_id, username)
+    await userbot_manager.restart_userbot_listener(admin_id, context.bot)
+
+    display = f"@{username}" if username else str(channel_id)
+    await query.edit_message_text(
+        f"✅ *Source channel set!*\n\n"
+        f"📡 Now monitoring: `{display}`\n"
+        f"ID: `{channel_id}`\n\n"
+        f"The bot will forward new messages from this channel to your target channels.\n\n"
+        f"➡️ *Next Step:* Use /addtarget to add your destination channels.",
+        parse_mode="Markdown",
+    )
+    return ConversationHandler.END
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # /addtarget
 # ─────────────────────────────────────────────────────────────────────────────
@@ -511,23 +642,37 @@ async def addtarget_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not await _check_authorized(update, admin_id):
         return ConversationHandler.END
 
-    targets = channels_db.get_target_channels(admin_id)
-    count = len(targets)
-    count_note = f"\n\nYou currently have *{count}* target channel(s)." if count else ""
+    loading_msg = await update.message.reply_text("🔄 Fetching your channels/groups/chats...")
 
-    await update.message.reply_text(
-        "🎯 *Add Target Channel*\n\n"
-        "Send the target channel as:\n"
-        "• `@username` or `https://t.me/username`\n"
-        "• Numeric ID: `-1001234567890`\n"
-        "• Or *forward any message* from the channel\n\n"
-        "⚠️ The bot must be an *admin* of the target channel to post messages."
-        f"{count_note}\n\n"
-        "You can add multiple targets — just run /addtarget again.\n\n"
-        "Type /cancel to abort.\n\n"
-        "💡 *Need a tutorial?* Send /help",
-        parse_mode="Markdown",
-    )
+    res = await _get_dialogs_keyboard_and_text(admin_id, context.bot, "tgtsel")
+    if res:
+        msg_text, reply_markup, temp_dialogs = res
+        context.user_data["temp_dialogs"] = temp_dialogs
+        await loading_msg.delete()
+        await update.message.reply_text(
+            msg_text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown",
+        )
+    else:
+        await loading_msg.delete()
+        targets = channels_db.get_target_channels(admin_id)
+        count = len(targets)
+        count_note = f"\n\nYou currently have *{count}* target channel(s)." if count else ""
+
+        await update.message.reply_text(
+            "🎯 *Add Target Channel*\n\n"
+            "Send the target channel as:\n"
+            "• `@username` or `https://t.me/username`\n"
+            "• Numeric ID: `-1001234567890`\n"
+            "• Or *forward any message* from the channel\n\n"
+            "⚠️ The bot must be an *admin* of the target channel to post messages."
+            f"{count_note}\n\n"
+            "You can add multiple targets — just run /addtarget again.\n\n"
+            "Type /cancel to abort.\n\n"
+            "💡 *Need a tutorial?* Send /help",
+            parse_mode="Markdown",
+        )
     return ADD_TARGET_WAIT
 
 
@@ -566,6 +711,51 @@ async def addtarget_receive(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     else:
         targets = channels_db.get_target_channels(admin_id)
         await msg.reply_text(
+            f"✅ *Target channel added!*\n\n"
+            f"🎯 `{display}` (ID: `{channel_id}`)\n\n"
+            f"Total targets: *{len(targets)}*\n\n"
+            f"➡️ *Next Steps:*\n"
+            f"• Run /addtarget again to add more.\n"
+            f"• Use /filter to set up keyword replacements.\n"
+            f"• Use /mystatus to verify your setup.",
+            parse_mode="Markdown",
+        )
+    return ConversationHandler.END
+
+
+async def addtarget_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    admin_id = query.from_user.id
+
+    try:
+        idx_str = query.data.split(":")[1]
+        idx = int(idx_str)
+    except (IndexError, ValueError):
+        await query.edit_message_text("❌ Invalid selection. Please start again with /addtarget.")
+        return ConversationHandler.END
+
+    temp_dialogs = context.user_data.get("temp_dialogs")
+    if not temp_dialogs or idx < 0 or idx >= len(temp_dialogs):
+        await query.edit_message_text("❌ Session expired or invalid selection. Please try again with /addtarget.")
+        return ConversationHandler.END
+
+    selected = temp_dialogs[idx]
+    channel_id = selected["id"]
+    username = selected["username"]
+
+    added = channels_db.add_target_channel(admin_id, channel_id, username)
+    invalidate_cache(admin_id)
+    display = f"@{username}" if username else str(channel_id)
+
+    if not added:
+        await query.edit_message_text(
+            f"ℹ️ `{display}` is already in your target list.",
+            parse_mode="Markdown",
+        )
+    else:
+        targets = channels_db.get_target_channels(admin_id)
+        await query.edit_message_text(
             f"✅ *Target channel added!*\n\n"
             f"🎯 `{display}` (ID: `{channel_id}`)\n\n"
             f"Total targets: *{len(targets)}*\n\n"
@@ -1081,7 +1271,11 @@ def register(application) -> None:
 
     # /authorize — OTP login
     application.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("authorize", authorize_start)],
+        entry_points=[
+            CommandHandler("authorize", authorize_start),
+            CallbackQueryHandler(authorize_start, pattern=r"^auth_login$"),
+            MessageHandler(filters.Regex("^🔐 AUTHORIZE$"), authorize_start),
+        ],
         states={
             AUTH_PHONE_WAIT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, auth_phone_receive),
@@ -1101,9 +1295,14 @@ def register(application) -> None:
 
     # /addsource
     application.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("addsource", addsource_start)],
+        entry_points=[
+            CommandHandler("addsource", addsource_start),
+            MessageHandler(filters.Regex("^📥 ADD SOURCE$"), addsource_start),
+        ],
         states={
             ADD_SOURCE_WAIT: [
+                CallbackQueryHandler(cancel_callback, pattern=r"^cancel_action$"),
+                CallbackQueryHandler(addsource_callback, pattern=r"^srcsel:"),
                 MessageHandler(filters.ALL & ~filters.COMMAND, addsource_receive),
             ],
         },
@@ -1113,9 +1312,14 @@ def register(application) -> None:
 
     # /addtarget
     application.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("addtarget", addtarget_start)],
+        entry_points=[
+            CommandHandler("addtarget", addtarget_start),
+            MessageHandler(filters.Regex("^📤 ADD TARGET$"), addtarget_start),
+        ],
         states={
             ADD_TARGET_WAIT: [
+                CallbackQueryHandler(cancel_callback, pattern=r"^cancel_action$"),
+                CallbackQueryHandler(addtarget_callback, pattern=r"^tgtsel:"),
                 MessageHandler(filters.ALL & ~filters.COMMAND, addtarget_receive),
             ],
         },
@@ -1128,7 +1332,10 @@ def register(application) -> None:
         import telegram.warnings
         warnings.simplefilter("ignore", telegram.warnings.PTBUserWarning)
         application.add_handler(ConversationHandler(
-            entry_points=[CommandHandler("filter", filter_start)],
+            entry_points=[
+                CommandHandler("filter", filter_start),
+                MessageHandler(filters.Regex("^🔍 FILTER$"), filter_start),
+            ],
             states={
                 FILTER_TYPE_WAIT: [
                     CallbackQueryHandler(filter_type_callback, pattern=r"^ftype:"),
@@ -1149,7 +1356,10 @@ def register(application) -> None:
         import telegram.warnings
         warnings.simplefilter("ignore", telegram.warnings.PTBUserWarning)
         application.add_handler(ConversationHandler(
-            entry_points=[CommandHandler("schedule", schedule_start)],
+            entry_points=[
+                CommandHandler("schedule", schedule_start),
+                MessageHandler(filters.Regex("^⏰ SCHEDULE$"), schedule_start),
+            ],
             states={
                 SCHED_CONTENT_WAIT: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, sched_content_receive),
@@ -1168,12 +1378,19 @@ def register(application) -> None:
 
     # Standalone commands
     application.add_handler(CommandHandler("removesource", removesource_command))
+    application.add_handler(MessageHandler(filters.Regex("^❌ REMOVE SOURCE$"), removesource_command))
     application.add_handler(CommandHandler("removetarget", removetarget_command))
+    application.add_handler(MessageHandler(filters.Regex("^❌ REMOVE TARGET$"), removetarget_command))
     application.add_handler(CommandHandler("myfilters", myfilters_command))
+    application.add_handler(MessageHandler(filters.Regex("^📋 MY FILTERS$"), myfilters_command))
     application.add_handler(CommandHandler("removeschedule", removeschedule_command))
+    application.add_handler(MessageHandler(filters.Regex("^🗑️ REMOVE SCHEDULE$"), removeschedule_command))
     application.add_handler(CommandHandler("mystatus", mystatus_command))
+    application.add_handler(MessageHandler(filters.Regex("^📊 MY STATUS$"), mystatus_command))
     application.add_handler(CommandHandler("work", work_command))
+    application.add_handler(MessageHandler(filters.Regex("^📡 WORK$"), work_command))
     application.add_handler(CommandHandler("stop", stop_command))
+    application.add_handler(MessageHandler(filters.Regex("^🛑 STOP$"), stop_command))
 
     # Callback query handlers
     application.add_handler(CallbackQueryHandler(myfilters_callback, pattern=r"^rmfilter:"))
