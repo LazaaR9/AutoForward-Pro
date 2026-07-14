@@ -344,7 +344,7 @@ async def start_webhook_server(bot: Bot) -> None:
     )
     await _runner.setup()
 
-    site = web.TCPSite(_runner, host="0.0.0.0", port=WEBHOOK_PORT)
+    site = web.TCPSite(_runner, host="0.0.0.0", port=8686)
     await site.start()
 
     logger.info(
